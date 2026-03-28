@@ -15,9 +15,9 @@ An MCP (Model Context Protocol) server that lets AI agents query a Fangorn subgr
 
 ```bash
 npm install
-cp .env.example .env
+cp env.example .env
 # Edit .env and set SUBGRAPH_URL
-npm run build
+pnpm build
 ```
 
 ## Running
@@ -71,7 +71,7 @@ When running in HTTP mode, clients connect to `http://localhost:3000/mcp` using 
 Use the MCP Inspector to test tools interactively:
 
 ```bash
-npm run inspector
+pnpm inspect
 ```
 
 ## Project Structure
@@ -82,8 +82,8 @@ fangorn-mcp-server/
 │   ├── index.ts             # Entry point — transport setup
 │   ├── subgraph-client.ts   # GraphQL client for the subgraph
 │   └── tools.ts             # MCP tool definitions
-├── build/                   # Compiled JS (after npm run build)
-├── .env.example             # Environment template
+├── dist/                   # Compiled JS (after npm run build)
+├── env.example             # Environment template
 ├── package.json
 └── tsconfig.json
 ```

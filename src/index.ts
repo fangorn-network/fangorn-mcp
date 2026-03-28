@@ -10,7 +10,8 @@
  */
 
 import { config } from "dotenv";
-config();
+
+config({quiet: true});
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -175,7 +176,7 @@ async function startHttp() {
   });
 
   app.listen(PORT, () => {
-    console.error(
+    console.info(
       `Fangorn MCP server listening on http://localhost:${PORT}\n` +
         `  Streamable HTTP: POST/GET/DELETE http://localhost:${PORT}/mcp\n` +
         `  Legacy SSE: GET http://localhost:${PORT}/sse → POST http://localhost:${PORT}/messages`
