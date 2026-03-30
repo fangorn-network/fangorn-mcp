@@ -47,6 +47,18 @@ function formatManifestMarkdown(ms: ManifestState): string {
   return md;
 }
 
+interface FangornMcpResponse {
+  resultType: string;
+  type: string;
+  text: string;
+  data: unknown;
+}
+
+interface FangornMcpError {
+  resultType: string;
+  err: Error
+}
+
 // ── Tool Registration ───────────────────────────────────────────────────────
 
 export function registerTools(server: McpServer, client: SubgraphClient) {
@@ -96,7 +108,7 @@ export function registerTools(server: McpServer, client: SubgraphClient) {
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(schemas, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify({resultType: "schemas", data: schemas}, null, 2) }],
         };
       } catch (err) {
         return {
@@ -143,7 +155,7 @@ export function registerTools(server: McpServer, client: SubgraphClient) {
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(schema, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify({resultType: "schema", data: schema}, null, 2)} ],
         };
       } catch (err) {
         return {
@@ -227,7 +239,7 @@ export function registerTools(server: McpServer, client: SubgraphClient) {
           }
 
           return {
-            content: [{ type: "text", text: JSON.stringify(entries, null, 2) }],
+            content: [{ type: "text", text: JSON.stringify({ resultType: "file_entries", data: entries }, null, 2) }],
           };
         }
 
@@ -248,7 +260,7 @@ export function registerTools(server: McpServer, client: SubgraphClient) {
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify(manifests, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify({ resultType: "manifest_states", data: manifests }, null, 2) }],
         };
       } catch (err) {
         return {
