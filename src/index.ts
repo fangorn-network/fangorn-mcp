@@ -32,7 +32,7 @@ if (!SUBGRAPH_URL) {
 }
 
 const TRANSPORT = (process.env.TRANSPORT ?? "stdio").toLowerCase();
-const PORT = parseInt(process.env.PORT ?? "3000", 10);
+const PORT = parseInt(process.env.APP_PORT ?? "3000", 10);
 
 // ── Bootstrap ───────────────────────────────────────────────────────────────
 

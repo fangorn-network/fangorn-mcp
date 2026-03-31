@@ -4,8 +4,8 @@ An MCP (Model Context Protocol) server that lets AI agents query a Fangorn subgr
 
 ## Tools
 
-| Tool                    |                        Description                          |
-|-------------------------|-------------------------------------------------------------|
+| Tool                    | Description                                                 |
+| ----------------------- | ----------------------------------------------------------- |
 | `subgraph_list_schemas` | List all registered schemas, optionally filtered by owner   |
 | `subgraph_get_schema`   | Get a single schema by name with its field definitions      |
 | `subgraph_query_data`   | Query data entries for a schema, with field-level filtering |
@@ -19,6 +19,17 @@ cp env.example .env
 # Edit .env and set SUBGRAPH_URL
 pnpm build
 ```
+
+### Docker
+
+To build the docker image, run:
+
+``` sh
+docker build -f Dockerfile \
+  -t tag/fangorn-network/mcp:latest .
+```
+
+where the tag is your desired registry/namesepace, e.g. for the GCP docker image registry `us-central1-docker.pkg.dev/lucky-lead-489114-d7`
 
 ## Running
 
@@ -35,6 +46,14 @@ TRANSPORT=stdio node build/index.js
 ```bash
 TRANSPORT=http PORT=3000 node build/index.js
 # Server listens at http://localhost:3000/mcp
+```
+
+### Docker
+
+After configuring .env, from the root run:
+
+``` sh
+docker compose up
 ```
 
 ## Claude Desktop Configuration
