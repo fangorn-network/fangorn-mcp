@@ -168,7 +168,10 @@ export class SubgraphClient {
   private async query<T>(graphql: string): Promise<T> {
     const res = await fetch(this.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.SUBGRAPH_API_KEY}`,
+      },
       body: JSON.stringify({ query: graphql }),
     });
 
