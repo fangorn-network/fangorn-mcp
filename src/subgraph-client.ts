@@ -166,12 +166,20 @@ export class SubgraphClient {
   }
 
   private async query<T>(graphql: string): Promise<T> {
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (process.env.SUBGRAPH_API_KEY) {
+      headers["Authorization"] = `Bearer ${process.env.SUBGRAPH_API_KEY}`;
+    } else {
+      console.warn("SUBGRAPH_API_KEY not set in env vars. No Auth header is being included.")
+    }
+
     const res = await fetch(this.url, {
       method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.SUBGRAPH_API_KEY}`,
-      },
+      headers,
       body: JSON.stringify({ query: graphql }),
     });
 
