@@ -11,7 +11,7 @@
 
 import { config } from "dotenv";
 
-config({quiet: true});
+config({ quiet: true });
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -33,6 +33,10 @@ if (!SUBGRAPH_URL) {
 
 const TRANSPORT = (process.env.TRANSPORT ?? "stdio").toLowerCase();
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
+
+const MAX_STREAMABLE_SESSIONS = parseInt(process.env.MAX_STREAMABLE_SESSIONS ?? "100", 10);
+const MAX_SSE_SESSIONS = parseInt(process.env.MAX_SSE_SESSIONS ?? "100", 10);
+const SESSION_TIMEOUT_MS = parseInt(process.env.SESSION_TIMEOUT_MS ?? "1800000", 10); // 30 min default
 
 // ── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -64,105 +68,211 @@ async function startHttp() {
 
   // ── Streamable HTTP sessions ──────────────────────────────────────────
 
-  const streamableSessions = new Map<
-    string,
-    { server: McpServer; transport: StreamableHTTPServerTransport }
-  >();
+  interface StreamableSession {
+    server: McpServer;
+    transport: StreamableHTTPServerTransport;
+    lastSeen: number;
+  }
+
+  const streamableSessions = new Map<string, StreamableSession>();
+
+  // ── Legacy SSE sessions ───────────────────────────────────────────────
+
+  interface SseSession {
+    server: McpServer;
+    transport: SSEServerTransport;
+    lastSeen: number;
+  }
+
+  const sseSessions = new Map<string, SseSession>();
+
+  // ── Session cleanup sweep ─────────────────────────────────────────────
+
+  setInterval(() => {
+    const now = Date.now();
+
+    for (const [id, session] of streamableSessions) {
+      if (now - session.lastSeen > SESSION_TIMEOUT_MS) {
+        console.error(`Evicting idle streamable session ${id}`);
+        try {
+          session.transport.close?.();
+        } catch { /* best effort */ }
+        streamableSessions.delete(id);
+      }
+    }
+
+    for (const [id, session] of sseSessions) {
+      if (now - session.lastSeen > SESSION_TIMEOUT_MS) {
+        console.error(`Evicting idle SSE session ${id}`);
+        try {
+          session.transport.close?.();
+        } catch { /* best effort */ }
+        sseSessions.delete(id);
+      }
+    }
+  }, 60_000);
+
+  // ── Streamable HTTP endpoints ─────────────────────────────────────────
 
   // POST /mcp — main Streamable HTTP RPC endpoint
   app.post("/mcp", async (req: Request, res: Response) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    try {
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-    // Existing session — route to its transport
-    if (sessionId && streamableSessions.has(sessionId)) {
-      const session = streamableSessions.get(sessionId)!;
-      await session.transport.handleRequest(req, res, req.body);
-      return;
-    }
-
-    // New session
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-    });
-
-    const server = createServer();
-    await server.connect(transport);
-
-    // Handle the init request (must pass req.body!)
-    await transport.handleRequest(req, res, req.body);
-
-    // Store the session
-    if (transport.sessionId) {
-      streamableSessions.set(transport.sessionId, { server, transport });
-    }
-
-    // Clean up on close
-    transport.onclose = () => {
-      if (transport.sessionId) {
-        streamableSessions.delete(transport.sessionId);
+      // Existing session — route to its transport
+      if (sessionId && streamableSessions.has(sessionId)) {
+        const session = streamableSessions.get(sessionId)!;
+        session.lastSeen = Date.now();
+        await session.transport.handleRequest(req, res, req.body);
+        return;
       }
-    };
+
+      // Enforce session cap before creating a new one
+      if (streamableSessions.size >= MAX_STREAMABLE_SESSIONS) {
+        res.status(503).json({
+          error: "Too many active sessions. Please try again later.",
+        });
+        return;
+      }
+
+      // New session — reserve a slot with a placeholder to prevent races
+      const placeholderId = `pending-${randomUUID()}`;
+      streamableSessions.set(placeholderId, undefined as unknown as StreamableSession);
+
+      try {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+        });
+
+        const server = createServer();
+        await server.connect(transport);
+
+        // Handle the init request
+        await transport.handleRequest(req, res, req.body);
+
+        // Replace placeholder with real session
+        streamableSessions.delete(placeholderId);
+
+        if (transport.sessionId) {
+          streamableSessions.set(transport.sessionId, {
+            server,
+            transport,
+            lastSeen: Date.now(),
+          });
+        }
+
+        // Clean up on close
+        transport.onclose = () => {
+          if (transport.sessionId) {
+            streamableSessions.delete(transport.sessionId);
+          }
+        };
+      } catch (err) {
+        // Remove placeholder on failure
+        streamableSessions.delete(placeholderId);
+        throw err;
+      }
+    } catch (err) {
+      console.error("Error in POST /mcp:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
   });
 
   // GET /mcp — SSE stream for Streamable HTTP server→client notifications
   app.get("/mcp", async (req: Request, res: Response) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (!sessionId || !streamableSessions.has(sessionId)) {
-      res.status(400).json({ error: "Invalid or missing session ID" });
-      return;
+    try {
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+      if (!sessionId || !streamableSessions.has(sessionId)) {
+        res.status(400).json({ error: "Invalid or missing session ID" });
+        return;
+      }
+      const session = streamableSessions.get(sessionId)!;
+      session.lastSeen = Date.now();
+      await session.transport.handleRequest(req, res, undefined);
+    } catch (err) {
+      console.error("Error in GET /mcp:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
     }
-    const session = streamableSessions.get(sessionId)!;
-    await session.transport.handleRequest(req, res, req.body);
   });
 
   // DELETE /mcp — terminate Streamable HTTP session
   app.delete("/mcp", async (req: Request, res: Response) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (!sessionId || !streamableSessions.has(sessionId)) {
-      res.status(400).json({ error: "Invalid or missing session ID" });
-      return;
+    try {
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+      if (!sessionId || !streamableSessions.has(sessionId)) {
+        res.status(400).json({ error: "Invalid or missing session ID" });
+        return;
+      }
+      const session = streamableSessions.get(sessionId)!;
+      await session.transport.handleRequest(req, res, req.body);
+      streamableSessions.delete(sessionId);
+    } catch (err) {
+      console.error("Error in DELETE /mcp:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
     }
-    const session = streamableSessions.get(sessionId)!;
-    await session.transport.handleRequest(req, res, req.body);
-    streamableSessions.delete(sessionId);
   });
 
   // ── Legacy SSE transport ──────────────────────────────────────────────
-  // Some clients (older protocol versions) use:
-  //   GET  /sse          → opens SSE event stream, receives endpoint URL
-  //   POST /messages?sessionId=...  → sends JSON-RPC messages
-
-  const sseSessions = new Map<
-    string,
-    { server: McpServer; transport: SSEServerTransport }
-  >();
 
   // GET /sse — open the legacy SSE event stream
   app.get("/sse", async (req: Request, res: Response) => {
-    console.error("Legacy SSE connection opened");
+    try {
+      // Enforce session cap
+      if (sseSessions.size >= MAX_SSE_SESSIONS) {
+        res.status(503).json({
+          error: "Too many active SSE sessions. Please try again later.",
+        });
+        return;
+      }
 
-    const transport = new SSEServerTransport("/messages", res);
-    const server = createServer();
+      console.error("Legacy SSE connection opened");
 
-    sseSessions.set(transport.sessionId, { server, transport });
+      const transport = new SSEServerTransport("/messages", res);
+      const server = createServer();
 
-    transport.onclose = () => {
-      sseSessions.delete(transport.sessionId);
-    };
+      sseSessions.set(transport.sessionId, {
+        server,
+        transport,
+        lastSeen: Date.now(),
+      });
 
-    await server.connect(transport);
-    await transport.start();
+      transport.onclose = () => {
+        sseSessions.delete(transport.sessionId);
+      };
+
+      await server.connect(transport);
+      await transport.start();
+    } catch (err) {
+      console.error("Error in GET /sse:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
   });
 
   // POST /messages — receive JSON-RPC messages for legacy SSE sessions
   app.post("/messages", async (req: Request, res: Response) => {
-    const sessionId = req.query.sessionId as string | undefined;
-    if (!sessionId || !sseSessions.has(sessionId)) {
-      res.status(400).json({ error: "Invalid or missing sessionId query parameter" });
-      return;
+    try {
+      const sessionId = req.query.sessionId as string | undefined;
+      if (!sessionId || !sseSessions.has(sessionId)) {
+        res.status(400).json({ error: "Invalid or missing sessionId query parameter" });
+        return;
+      }
+      const session = sseSessions.get(sessionId)!;
+      session.lastSeen = Date.now();
+      await session.transport.handlePostMessage(req, res);
+    } catch (err) {
+      console.error("Error in POST /messages:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
     }
-    const session = sseSessions.get(sessionId)!;
-    await session.transport.handlePostMessage(req, res);
   });
 
   // ── Health check ──────────────────────────────────────────────────────
