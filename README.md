@@ -7,7 +7,7 @@ An MCP (Model Context Protocol) server that lets AI agents query a Fangorn subgr
 ```bash
 pnpm i
 cp env.example .env
-# Edit .env and set SUBGRAPH_URL
+# Edit .env and set SUBGRAPH_URL and SUBGRAPH_API_KEY (if calling published Subgraph)
 pnpm build
 ```
 
