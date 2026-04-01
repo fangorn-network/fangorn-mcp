@@ -17,7 +17,7 @@ To build the docker image, run:
 
 ``` sh
 docker build -f Dockerfile \
-  -t tag/fangorn-network/mcp:latest .
+  -t us-central1-docker.pkg.dev/lucky-lead-489114-d7/fangorn-network/mcp:latest .
 ```
 
 where the tag is your desired registry/namesepace, e.g. for the GCP docker image registry `us-central1-docker.pkg.dev/lucky-lead-489114-d7`
