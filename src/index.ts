@@ -51,6 +51,18 @@ function createServer(): McpServer {
   return server;
 }
 
+/**
+ * Safely tear down both a server and its transport.
+ */
+async function closeSession(server: McpServer, transport: { close?: () => void }) {
+  try {
+    transport.close?.();
+  } catch { /* best effort */ }
+  try {
+    await server.close();
+  } catch { /* best effort */ }
+}
+
 // ── stdio transport ─────────────────────────────────────────────────────────
 
 async function startStdio() {
@@ -76,6 +88,13 @@ async function startHttp() {
 
   const streamableSessions = new Map<string, StreamableSession>();
 
+  /**
+   * Mutex counter for streamable session creation.
+   * Tracks how many sessions are currently being created so that
+   * concurrent requests cannot race past the cap check.
+   */
+  let streamablePendingCount = 0;
+
   // ── Legacy SSE sessions ───────────────────────────────────────────────
 
   interface SseSession {
@@ -94,20 +113,16 @@ async function startHttp() {
     for (const [id, session] of streamableSessions) {
       if (now - session.lastSeen > SESSION_TIMEOUT_MS) {
         console.error(`Evicting idle streamable session ${id}`);
-        try {
-          session.transport.close?.();
-        } catch { /* best effort */ }
         streamableSessions.delete(id);
+        closeSession(session.server, session.transport);
       }
     }
 
     for (const [id, session] of sseSessions) {
       if (now - session.lastSeen > SESSION_TIMEOUT_MS) {
         console.error(`Evicting idle SSE session ${id}`);
-        try {
-          session.transport.close?.();
-        } catch { /* best effort */ }
         sseSessions.delete(id);
+        closeSession(session.server, session.transport);
       }
     }
   }, 60_000);
@@ -120,24 +135,29 @@ async function startHttp() {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
       // Existing session — route to its transport
-      if (sessionId && streamableSessions.has(sessionId)) {
-        const session = streamableSessions.get(sessionId)!;
-        session.lastSeen = Date.now();
-        await session.transport.handleRequest(req, res, req.body);
+      if (sessionId) {
+        const session = streamableSessions.get(sessionId);
+        if (session) {
+          session.lastSeen = Date.now();
+          await session.transport.handleRequest(req, res, req.body);
+          return;
+        }
+        // Session ID was provided but not found — reject rather than
+        // silently creating a new session.
+        res.status(400).json({ error: "Unknown session ID" });
         return;
       }
 
-      // Enforce session cap before creating a new one
-      if (streamableSessions.size >= MAX_STREAMABLE_SESSIONS) {
+      // Enforce session cap, including in-flight creations, to prevent races
+      if (streamableSessions.size + streamablePendingCount >= MAX_STREAMABLE_SESSIONS) {
         res.status(503).json({
           error: "Too many active sessions. Please try again later.",
         });
         return;
       }
 
-      // New session — reserve a slot with a placeholder to prevent races
-      const placeholderId = `pending-${randomUUID()}`;
-      streamableSessions.set(placeholderId, undefined as unknown as StreamableSession);
+      // Reserve a slot synchronously before any await
+      streamablePendingCount++;
 
       try {
         const transport = new StreamableHTTPServerTransport({
@@ -150,9 +170,7 @@ async function startHttp() {
         // Handle the init request
         await transport.handleRequest(req, res, req.body);
 
-        // Replace placeholder with real session
-        streamableSessions.delete(placeholderId);
-
+        // Register the real session
         if (transport.sessionId) {
           streamableSessions.set(transport.sessionId, {
             server,
@@ -166,11 +184,13 @@ async function startHttp() {
           if (transport.sessionId) {
             streamableSessions.delete(transport.sessionId);
           }
+          closeSession(server, transport);
         };
       } catch (err) {
-        // Remove placeholder on failure
-        streamableSessions.delete(placeholderId);
         throw err;
+      } finally {
+        // Always release the pending slot
+        streamablePendingCount--;
       }
     } catch (err) {
       console.error("Error in POST /mcp:", err);
@@ -184,11 +204,15 @@ async function startHttp() {
   app.get("/mcp", async (req: Request, res: Response) => {
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      if (!sessionId || !streamableSessions.has(sessionId)) {
-        res.status(400).json({ error: "Invalid or missing session ID" });
+      if (!sessionId) {
+        res.status(400).json({ error: "Missing session ID" });
         return;
       }
-      const session = streamableSessions.get(sessionId)!;
+      const session = streamableSessions.get(sessionId);
+      if (!session) {
+        res.status(400).json({ error: "Invalid session ID" });
+        return;
+      }
       session.lastSeen = Date.now();
       await session.transport.handleRequest(req, res, undefined);
     } catch (err) {
@@ -203,13 +227,18 @@ async function startHttp() {
   app.delete("/mcp", async (req: Request, res: Response) => {
     try {
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
-      if (!sessionId || !streamableSessions.has(sessionId)) {
-        res.status(400).json({ error: "Invalid or missing session ID" });
+      if (!sessionId) {
+        res.status(400).json({ error: "Missing session ID" });
         return;
       }
-      const session = streamableSessions.get(sessionId)!;
+      const session = streamableSessions.get(sessionId);
+      if (!session) {
+        res.status(400).json({ error: "Invalid session ID" });
+        return;
+      }
       await session.transport.handleRequest(req, res, req.body);
       streamableSessions.delete(sessionId);
+      await closeSession(session.server, session.transport);
     } catch (err) {
       console.error("Error in DELETE /mcp:", err);
       if (!res.headersSent) {
@@ -244,6 +273,7 @@ async function startHttp() {
 
       transport.onclose = () => {
         sseSessions.delete(transport.sessionId);
+        closeSession(server, transport);
       };
 
       await server.connect(transport);
@@ -260,11 +290,15 @@ async function startHttp() {
   app.post("/messages", async (req: Request, res: Response) => {
     try {
       const sessionId = req.query.sessionId as string | undefined;
-      if (!sessionId || !sseSessions.has(sessionId)) {
-        res.status(400).json({ error: "Invalid or missing sessionId query parameter" });
+      if (!sessionId) {
+        res.status(400).json({ error: "Missing sessionId query parameter" });
         return;
       }
-      const session = sseSessions.get(sessionId)!;
+      const session = sseSessions.get(sessionId);
+      if (!session) {
+        res.status(400).json({ error: "Invalid sessionId query parameter" });
+        return;
+      }
       session.lastSeen = Date.now();
       await session.transport.handlePostMessage(req, res);
     } catch (err) {
