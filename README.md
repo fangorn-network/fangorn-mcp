@@ -11,9 +11,20 @@ cp env.example .env
 pnpm build
 ```
 
+### Docker
+
+To build the docker image, run:
+
+``` sh
+docker build -f Dockerfile \
+  -t tag/fangorn-network/mcp:latest .
+```
+
+where the tag is your desired registry/namesepace, e.g. for the GCP docker image registry `us-central1-docker.pkg.dev/lucky-lead-489114-d7`
+
 ## Running
 
-### Local (stdio) — for Claude Desktop, Claude Code, etc.
+### Local (stdio)
 
 ```bash
 pnpm start
@@ -27,6 +38,18 @@ TRANSPORT=stdio node build/index.js
 TRANSPORT=http PORT=4000 node build/index.js
 # Server listens at http://localhost:4000/mcp
 ```
+
+### Docker
+
+After configuring .env, from the root run:
+
+``` sh
+docker compose up
+```
+
+## Remote Client Connection
+
+When running in HTTP mode, clients connect to `http://localhost:4000/mcp` using the Streamable HTTP transport.
 
 ## Debugging
 
