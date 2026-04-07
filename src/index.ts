@@ -20,7 +20,7 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
 
-import { SubgraphClient } from "./subgraph-client.js";
+import { McpSubgraphClient } from "./subgraph-client.js";
 import { registerTools } from "./tools.js";
 
 // ── Configuration ───────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ const SESSION_TIMEOUT_MS = parseInt(process.env.SESSION_TIMEOUT_MS ?? "1800000",
 
 // ── Bootstrap ───────────────────────────────────────────────────────────────
 
-const client = new SubgraphClient(SUBGRAPH_URL);
+const client = new McpSubgraphClient(SUBGRAPH_URL);
 
 function createServer(): McpServer {
   const server = new McpServer({
