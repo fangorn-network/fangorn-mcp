@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@fangorn-network/subgraph-client':
-        specifier: file:../subgraphs/packages/client
-        version: subgraph-client@file:../subgraphs/packages/client
+        specifier: file:../subgraphs/client
+        version: file:../subgraphs/client
       '@modelcontextprotocol/sdk':
         specifier: ^1.28.0
         version: 1.28.0(zod@4.3.6)
@@ -200,6 +200,10 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fangorn-network/subgraph-client@file:../subgraphs/client':
+    resolution: {directory: ../subgraphs/client, type: directory}
+    engines: {node: '>=18'}
 
   '@graphql-typed-document-node/core@3.2.0':
     resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
@@ -608,10 +612,6 @@ packages:
     resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
     engines: {node: '>= 0.8'}
 
-  subgraph-client@file:../subgraphs/packages/client:
-    resolution: {directory: ../subgraphs/packages/client, type: directory}
-    engines: {node: '>=18'}
-
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
@@ -742,6 +742,14 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.4':
     optional: true
+
+  '@fangorn-network/subgraph-client@file:../subgraphs/client':
+    dependencies:
+      '@graphql-typed-document-node/core': 3.2.0(graphql@16.13.2)
+      dotenv: 17.4.1
+      graphql: 16.13.2
+      graphql-request: 7.4.0(graphql@16.13.2)
+      graphql-tag: 2.12.6(graphql@16.13.2)
 
   '@graphql-typed-document-node/core@3.2.0(graphql@16.13.2)':
     dependencies:
@@ -1210,14 +1218,6 @@ snapshots:
       side-channel-weakmap: 1.0.2
 
   statuses@2.0.2: {}
-
-  subgraph-client@file:../subgraphs/packages/client:
-    dependencies:
-      '@graphql-typed-document-node/core': 3.2.0(graphql@16.13.2)
-      dotenv: 17.4.1
-      graphql: 16.13.2
-      graphql-request: 7.4.0(graphql@16.13.2)
-      graphql-tag: 2.12.6(graphql@16.13.2)
 
   toidentifier@1.0.1: {}
 

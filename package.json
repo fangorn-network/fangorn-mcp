@@ -24,7 +24,7 @@
     "zod": "^4.3.6",
 		"graphql": "^16.13.2",
     "graphql-request": "^7.1.2",
-		"@fangorn-network/subgraph-client": "file:../subgraphs/packages/client"
+		"@fangorn-network/subgraph-client": "file:../subgraphs/client"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

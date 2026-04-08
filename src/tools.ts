@@ -28,6 +28,7 @@ const SUBGRAPH_GET_FIELDS = "subgraph_get_fields";
 const SUBGRAPH_SEARCH_FIELDS = "subgraph_search_fields";
 const SUBGRAPH_SEARCH_FIELDS_GLOBAL = "subgraph_search_fields_global";
 const SUBGRAPH_RAW_QUERY = "subgraph_raw_query";
+const SUBGRAPH_SEARCH_FIELDS_BY_NAME_GLOBAL = "subgraph_search_fields_by_name_global";
 
 // ── Tool Registration ───────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: schemas }, null, 2),
+              text: JSON.stringify({ resultType: "schemas", data: schemas }),
             },
           ],
         };
@@ -116,7 +117,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: schema }, null, 2),
+              text: JSON.stringify({ resultType: "schemas", data: schema }),
             },
           ],
         };
@@ -171,7 +172,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "schema_entries", data: entries }, null, 2),
+              text: JSON.stringify({ resultType: "schema_entries", data: entries }),
             },
           ],
         };
@@ -232,7 +233,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: states }, null, 2),
+              text: JSON.stringify({ resultType: "manifest_states", data: states }),
             },
           ],
         };
@@ -294,7 +295,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifests", data: manifests }, null, 2),
+              text: JSON.stringify({ resultType: "manifests", data: manifests }),
             },
           ],
         };
@@ -341,7 +342,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifests", data: manifest }, null, 2),
+              text: JSON.stringify({ resultType: "manifests", data: manifest }),
             },
           ],
         };
@@ -396,7 +397,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "file_entries", data: entries }, null, 2),
+              text: JSON.stringify({ resultType: "file_entries", data: entries }),
             },
           ],
         };
@@ -451,7 +452,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "file_entries", data: entries }, null, 2),
+              text: JSON.stringify({ resultType: "file_entries", data: entries }),
             },
           ],
         };
@@ -510,7 +511,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "fields", data: fields }, null, 2),
+              text: JSON.stringify({ resultType: "fields", data: fields }),
             },
           ],
         };
@@ -531,8 +532,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
       title: "Search Fields",
       description:
         "Search for fields matching a name and/or value within a specific schema. " +
-        "Returns Field entities directly — use the manifestState.id and fileEntry.id " +
-        "references on each result to navigate to parent entities.\n\n" +
+        "Returns Manifests directly.\n\n" +
         "Tip: Use subgraph_get_schema first to discover available field names.",
       inputSchema: {
         schemaName: z
@@ -546,7 +546,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
         fieldValue: z
           .string()
           .optional()
-          .describe("Exact value to match (e.g. 'Theo Cappucino'). If omitted, returns all fields matching the name."),
+          .describe("Exact, case sensitive, value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
         owner: z
           .string()
           .optional()
@@ -568,7 +568,8 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     },
     async ({ schemaName, fieldName, fieldValue, owner, first, skip }) => {
       try {
-        const fields = await client.searchFields(schemaName, {
+
+        const manifests = await client.searchManifestsByFieldsAndSchemaName(schemaName, {
           name: fieldName,
           value: fieldValue,
           first,
@@ -579,7 +580,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "fields", data: fields }, null, 2),
+              text: JSON.stringify({ resultType: "manifest_states", data: manifests }),
             },
           ],
         };
@@ -599,10 +600,9 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     {
       title: "Search Fields (Global)",
       description:
-        "Search for fields by name and/or value across ALL schemas. Returns Field " +
-        "entities directly — use the manifestState.id reference on each result to " +
-        "discover which schema and owner the match belongs to.\n\n" +
-        "Use this when you want to find data without knowing which schema it belongs to.",
+        "Search for fields by name and value across ALL schemas and manifests. Returns Manifest " +
+        "entities directly. \n\n" +
+        "Use this when you want to find collections of data at a higher level without knowing which schema they belong to.",
       inputSchema: {
         fieldName: z
           .string()
@@ -611,7 +611,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
         fieldValue: z
           .string()
           .optional()
-          .describe("Exact value to match (e.g. 'Theo Cappucino'). If omitted, returns all fields matching the name."),
+          .describe("Exact, case sensitive, value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
         owner: z
           .string()
           .optional()
@@ -633,10 +633,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     },
     async ({ fieldName, fieldValue, owner, first, skip }) => {
       try {
-				if (fieldValue) {
-					fieldValue = ""
-				}
-        const fields = await client.searchFieldsGlobal({
+        const fields = await client.searchManifestsByFieldsGlobal({
           name: fieldName,
           value: fieldValue,
           first,
@@ -647,7 +644,60 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "fields", data: fields }, null, 2),
+              text: JSON.stringify({ resultType: "manifest_states", data: fields }),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+	server.registerTool(
+    SUBGRAPH_SEARCH_FIELDS_BY_NAME_GLOBAL,
+    {
+      title: "Search for Fields by Name (Global)",
+      description:
+        "Search for fields by name across ALL schemas and manifests. Returns File " +
+        "entities directly. \n\n" +
+        "Use this when you want to find data granularly without knowing which schema or manifest it belongs to.",
+      inputSchema: {
+        fieldName: z
+          .string()
+          .min(1)
+          .describe("Field name to search on (e.g. 'artist', 'title', 'genre')"),
+        first: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(20)
+          .describe("Maximum number of results to return"),
+        skip: z
+          .number()
+          .int()
+          .min(0)
+          .default(0)
+          .describe("Number of results to skip for pagination"),
+      },
+    },
+    async ({ fieldName, first, skip }) => {
+      try {
+        const files = await client.searchFilesByFileFieldName({
+          name: fieldName,
+          first,
+          skip,
+        });
+				
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ resultType: "file_entries", data: files }),
             },
           ],
         };
@@ -683,7 +733,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
       try {
         const result = await client.rawQuery(query);
         return {
-          content: [{ type: "text", text: JSON.stringify({ resultType: "non-standard", data: result }, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify({ resultType: "non-standard", data: result }) }],
         };
       } catch (err) {
         return {

@@ -1,4 +1,4 @@
-import { FileEntry, FileField, GetAllSchemaStatesByOwnerQueryVariables, GetAllSchemaStatesQueryVariables, GetFileByFileFieldNameValuePairQueryVariables, GetFileEntriesByManifestIdQueryVariables, GetFileFieldsByFileIdQueryVariables, GetManifestByFileFieldNameValuePairQueryVariables, GetManifestByIdQueryVariables, GetManifestStatesBySchemaNameAndOwnerQueryVariables, GetManifestStatesBySchemaNameQueryVariables, GetSchemasBySchemaIdQueryVariables, GetSchemaStateByNameQueryVariables, getSubgraphClients, Manifest, ManifestState, Schema, SchemaState, Sdk } from "@fangorn-network/subgraph-client";
+import { FileByFileField, FileEntry, FileField, GetAllSchemaStatesByOwnerQueryVariables, GetAllSchemaStatesQueryVariables, GetFileEntriesByManifestIdQueryVariables, GetFileFieldsByFileFieldNameQueryVariables, GetFileFieldsByFileIdQueryVariables, GetFilesByFileFieldNameQueryVariables, GetManifestByFileFieldNameValuePairQueryVariables, GetManifestByIdQueryVariables, GetManifestStatesBySchemaNameAndOwnerQueryVariables, GetManifestStatesBySchemaNameQueryVariables, GetSchemasBySchemaIdQueryVariables, GetSchemaStateByNameQueryVariables, getSubgraphClients, Manifest, ManifestByFileField, ManifestState, Schema, SchemaState, Sdk } from "@fangorn-network/subgraph-client";
 import { GraphQLClient } from "graphql-request";
 
 // ── Client ──────────────────────────────────────────────────────────────────
@@ -148,49 +148,80 @@ export class McpSubgraphClient {
    * Search fields within a specific schema.
    * Returns Field[] — use manifestState.id and fileEntry.id to navigate.
    */
-  async searchFields(schemaName: string, args: GetManifestByFileFieldNameValuePairQueryVariables, owner?: string ): Promise<FileField[]> {
+async searchManifestsByFieldsAndSchemaName(
+  schemaName: string,
+  args: GetManifestByFileFieldNameValuePairQueryVariables,
+  owner?: string
+): Promise<ManifestState[]> {
 
-		const result = await this.typedClient.GetManifestByFileFieldNameValuePair(args);
+	let result;
+	if (!args.value) {
+		result = await this.typedClient.GetManifestByFileFieldName(args);
+	} else {
+		result = await this.typedClient.GetManifestByFileFieldNameValuePair(args);
+	}
+  
 
-		const fileFields: FileField[] = result.fileFields
-    	.filter((ff) => {
-    	  const manifestState = ff.file?.manifest?.manifestState;
-    	  if (!manifestState) return false;
-    	  if (manifestState.schemaName !== schemaName) return false;
-    	  if (owner && manifestState.owner !== owner) return false;
-    	  return true;
-    	})
-    	.flatMap((ff) => {
-    	  const files = ff.file?.manifest?.manifestState?.manifest?.files ?? [];
-    	  return files.flatMap((file) => file.fileFields ?? []);
-    	});
+	console.log("Searching Manifests by fields and schema name")
 
-  	return fileFields;
+  const manifests = result.fileFields
+    .filter((ff: ManifestByFileField) => {
+      const manifestState = ff.file?.manifest?.manifestState;
+      if (!manifestState) return false;
+      if (manifestState.schemaName !== schemaName) return false;
+      if (owner && manifestState.owner !== owner) return false;
+      return true;
+    })
+    .map((ff: ManifestByFileField) => ff.file!.manifest!.manifestState!)
+    .filter(
+      (m: ManifestState, index: number, self: ManifestState[]) =>
+        self.findIndex((other) => other.id === m.id) === index
+    );
 
-  }
+  return manifests;
+}
 
   /**
    * Search fields across all schemas.
-   * Returns Field[] — use manifestState.id and fileEntry.id to navigate.
+   * Returns Manifest[] — use manifestState.id and fileEntry.id to navigate.
    */
-  async searchFieldsGlobal(args: GetManifestByFileFieldNameValuePairQueryVariables, ): Promise<FileField[]> {
+  async searchManifestsByFieldsGlobal(args: GetManifestByFileFieldNameValuePairQueryVariables, ): Promise<ManifestState[]> {
 
-		const result = await this.typedClient.GetManifestByFileFieldNameValuePair(args);
+	console.log("Searching Globally")
 
-		const fileFields: FileField[] = result.fileFields
-    	.filter((ff) => {
-    	  const manifestState = ff.file?.manifest?.manifestState;
-    	  if (!manifestState) return false;
-    	  return true;
-    	})
-    	.flatMap((ff) => {
-    	  const files = ff.file?.manifest?.manifestState?.manifest?.files ?? [];
-    	  return files.flatMap((file) => file.fileFields ?? []);
-    	});
+	console.log(`variables: ${JSON.stringify(args, null, 2)}`)
 
-		return fileFields
+	let result;
+	if (!args.value) {
+		result = await this.typedClient.GetManifestByFileFieldName(args);
+	} else {
+		result = await this.typedClient.GetManifestByFileFieldNameValuePair(args);
+	}
+
+  const manifests = result.fileFields
+    .filter((ff: ManifestByFileField) => {
+      const manifestState = ff.file?.manifest?.manifestState;
+      if (!manifestState) return false;
+      return true;
+    })
+    .map((ff: ManifestByFileField) => ff.file!.manifest!.manifestState!)
+    .filter(
+      (m: ManifestState, index: number, self: ManifestState[]) =>
+        self.findIndex((other) => other.id === m.id) === index
+    );
+
+		return manifests;
 
   }
+
+	async searchFilesByFileFieldName(args: GetFilesByFileFieldNameQueryVariables ): Promise<FileEntry[]> {
+		console.log("Searching Globally for FileFields")
+		const result = await this.typedClient.GetFilesByFileFieldName(args);
+		const files = result.fileFields.map((ff: FileByFileField) => ff.file!)
+		return files
+	}
+
+	// async searchFilesBy(args: GetManifestByFileFieldNameValuePairQueryVariables, ): Promise<ManifestState[]> {
 
   // ── Raw ─────────────────────────────────────────────────────────────────
 
