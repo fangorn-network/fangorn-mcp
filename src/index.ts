@@ -19,8 +19,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
-
-import { McpSubgraphClient } from "./subgraph-client.js";
+import { FangornGraphClient } from "@fangorn-network/subgraph-client";
 import { registerTools } from "./tools.js";
 
 // ── Configuration ───────────────────────────────────────────────────────────
@@ -40,7 +39,7 @@ const SESSION_TIMEOUT_MS = parseInt(process.env.SESSION_TIMEOUT_MS ?? "1800000",
 
 // ── Bootstrap ───────────────────────────────────────────────────────────────
 
-const client = new McpSubgraphClient(SUBGRAPH_URL);
+const client = new FangornGraphClient(SUBGRAPH_URL);
 
 function createServer(): McpServer {
   const server = new McpServer({

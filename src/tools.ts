@@ -1,48 +1,28 @@
-/**
- * Registers all subgraph tools on the McpServer instance.
- *
- * Every tool returns exactly one primitive entity type (or an array of them)
- * with a `resultType` key so the caller knows which entity it received.
- *
- * Entity types: Schema, SchemaEntries, SchemaField, ManifestState,
- *               Manifest, FileEntry, Field, PricingResource
- */
-
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  McpSubgraphClient,
-} from "./subgraph-client.js";
+  FangornGraphClient,
+} from "@fangorn-network/subgraph-client"
 
-// ── Tool Names ──────────────────────────────────────────────────────────────
-
-const SUBGRAPH_LIST_SCHEMAS = "subgraph_list_schemas";
-const SUBGRAPH_GET_SCHEMA = "subgraph_get_schema";
-const SUBGRAPH_GET_SCHEMAS = "subgraph_get_schema_entries";
-const SUBGRAPH_LIST_MANIFEST_STATES = "subgraph_list_manifest_states";
-const SUBGRAPH_LIST_MANIFESTS = "subgraph_list_manifests";
-const SUBGRAPH_GET_MANIFEST = "subgraph_get_manifest";
+const SUBGRAPH_LIST_SCHEMAS = "subgraph_list_all_schemas";
+const SUBGRAPH_GET_SCHEMA_BY_NAME = "subgraph_get_schema_by_name";
+const SUBGRAPH_LIST_MANIFEST_STATES_BY_SCHEMA_NAME = "subgraph_list_manifest_states_by_schema_name";
+const SUBGRAPH_GET_MANIFEST_BY_ID = "subgraph_get_manifest_by_id";
 const SUBGRAPH_LIST_FILE_ENTRIES = "subgraph_list_file_entries";
-const SUBGRAPH_GET_FILE_ENTRIES = "subgraph_get_file_entries";
-const SUBGRAPH_GET_FIELDS = "subgraph_get_fields";
 const SUBGRAPH_SEARCH_FIELDS = "subgraph_search_fields";
 const SUBGRAPH_SEARCH_FIELDS_GLOBAL = "subgraph_search_fields_global";
 const SUBGRAPH_RAW_QUERY = "subgraph_raw_query";
 const SUBGRAPH_SEARCH_FIELDS_BY_NAME_GLOBAL = "subgraph_search_fields_by_name_global";
 
-// ── Tool Registration ───────────────────────────────────────────────────────
 
-export function registerTools(server: McpServer, client: McpSubgraphClient) {
-
-  // ── 1. List schemas ──────────────────────────────────────────────────────
+export function registerTools(server: McpServer, client: FangornGraphClient) {
 
   server.registerTool(
     SUBGRAPH_LIST_SCHEMAS,
     {
-      title: "List Schemas",
+      title: "List All Schemas",
       description:
-        "List all registered schemas in the subgraph. Optionally filter by owner address. " +
-        "Use this as a starting point to discover what schemas exist before querying data.",
+        "List all registered schemas in the subgraph. Optionally filter by owner address.",
       inputSchema: {
         owner: z
           .string()
@@ -65,12 +45,12 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     },
     async ({ owner, first, skip }) => {
       try {
-        const schemas = await client.listSchemas({ owner, first, skip });
+        const schemaStates = await client.getAllSchemaStates({ owner, first, skip });
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: schemas }),
+              text: JSON.stringify({ resultType: "schemas", data: schemaStates }),
             },
           ],
         };
@@ -83,17 +63,13 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     }
   );
 
-  // ── 2. Get schema ────────────────────────────────────────────────────────
-
   server.registerTool(
-    SUBGRAPH_GET_SCHEMA,
+    SUBGRAPH_GET_SCHEMA_BY_NAME,
     {
-      title: "Get Schema",
+      title: "Get Schema By Name",
       description:
-        "Retrieve a single schema by its fully-qualified name. Returns the schema ID, " +
-        "owner, and all version details including field definitions. " +
-        "Use this before querying or searching data to discover which field names " +
-        "are available for filtering.",
+        "Retrieve a single schema by its fully-qualified name. Returns the entire schema." +
+        "This can be used to discover which field names are available for files in manifests that use this schema.",
       inputSchema: {
         name: z
           .string()
@@ -103,9 +79,9 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     },
     async ({ name }) => {
       try {
-        const schema = await client.getSchema({name});
+        const schemaState = await client.getSchemaStateByName({name});
 
-        if (!schema) {
+        if (!schemaState) {
           return {
             content: [
               { type: "text", text: `Schema "${name}" not found.` },
@@ -113,11 +89,19 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           };
         }
 
+				if (!schemaState.versions || schemaState.versions.length === 0) {
+					return {
+            content: [
+              { type: "text", text: `Schema "${name}" not found.` },
+            ],
+          };
+				}
+
         return {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: schema }),
+              text: JSON.stringify({ resultType: "schemas", data: [schemaState] }),
             },
           ],
         };
@@ -130,71 +114,14 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     }
   );
 
-  // ── 3. Get schema entries ────────────────────────────────────────────────
-
   server.registerTool(
-    SUBGRAPH_GET_SCHEMAS,
+    SUBGRAPH_LIST_MANIFEST_STATES_BY_SCHEMA_NAME,
     {
-      title: "Get Schema Entries",
+      title: "List Manifest States By Schema Name",
       description:
-        "Retrieve the version entries (SchemaEntries) for a given schema. " +
-        "Each entry includes the version number, spec CID, agent ID, and field definitions. " +
-        "Use a schema ID from the list_schemas or get_schema results.",
-      inputSchema: {
-        schemaId: z
-          .string()
-          .min(1)
-          .describe("The schema entity ID to get entries for"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of entries to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of entries to skip for pagination")
-      },
-    },
-    async ({ schemaId, first, skip }) => {
-      try {
-        const entries = await client.getSchemaEntries({
-          id: schemaId,
-          first,
-          skip,
-        });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "schema_entries", data: entries }),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-  // ── 4. List manifest states ──────────────────────────────────────────────
-
-  server.registerTool(
-    SUBGRAPH_LIST_MANIFEST_STATES,
-    {
-      title: "List Manifest States",
-      description:
-        "List all manifest states published under a given schema. Each manifest state " +
-        "represents a data publication by an owner. Returns the full manifest state " +
-        "including its manifest content, file entries, and fields.\n\n" +
+        "List all manifest states published under a given schema by the schema's name. Each manifest state " +
+        "represents a data publication by an owner. Returns the full manifest " +
+        "including its file entries, and fields.\n\n" +
         "Tip: Use subgraph_get_schema first to understand the schema's field definitions.",
       inputSchema: {
         schemaName: z
@@ -222,7 +149,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     },
     async ({ schemaName, owner, first, skip }) => {
       try {
-        const states = await client.listManifestStates({
+        const manifestStates = await client.getManifestStatesBySchemaNameAndOwner({
           name: schemaName,
           owner,
           first,
@@ -233,69 +160,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: states }),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-  // ── 5. List manifests ────────────────────────────────────────────────────
-
-  server.registerTool(
-    SUBGRAPH_LIST_MANIFESTS,
-    {
-      title: "List Manifests",
-      description:
-        "List all manifests published under a given schema name. Returns Manifest " +
-        "entities directly, each with its full file entries and fields populated.\n\n" +
-        "This queries through manifestStates but returns only the Manifest children, " +
-        "filtering out any manifest states that have no linked manifest.\n\n" +
-        "Use this when you want the manifest content without the manifest state metadata.",
-      inputSchema: {
-        schemaName: z
-          .string()
-          .min(1)
-          .describe("Full schema name to list manifests for (e.g. 'noagent-fangorn.test.music.v0')"),
-        owner: z
-          .string()
-          .optional()
-          .describe("Filter by data source owner address"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of manifests to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of manifests to skip for pagination")
-      },
-    },
-    async ({ schemaName, owner, first, skip }) => {
-      try {
-        const manifests = await client.listManifests({
-          name: schemaName,
-          owner,
-          first,
-          skip,
-        });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "manifests", data: manifests }),
+              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates }),
             },
           ],
         };
@@ -311,14 +176,12 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
   // ── 6. Get manifest ──────────────────────────────────────────────────────
 
   server.registerTool(
-    SUBGRAPH_GET_MANIFEST,
+    SUBGRAPH_GET_MANIFEST_BY_ID,
     {
-      title: "Get Manifest",
+      title: "Get Manifest by Manifest State ID",
       description:
-        "Retrieve a single manifest by its ID. Returns the full manifest including " +
-        "all file entries and their fields. Use a manifest ID from list_manifest_states " +
-        "or list_manifests results.\n\n" +
-        "This is the bridge between a manifest state (metadata) and its actual content (files/fields).",
+        "Retrieve a single manifest by its parent manifest state ID. Returns the full manifest including " +
+        "all file entries and their fields.",
       inputSchema: {
         manifestId: z
           .string()
@@ -328,9 +191,9 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     },
     async ({ manifestId }) => {
       try {
-        const manifest = await client.getManifest({id: manifestId});
+        const manifestState = await client.getManifestStateById({id: manifestId});
 
-        if (!manifest) {
+        if (!manifestState) {
           return {
             content: [
               { type: "text", text: `Manifest "${manifestId}" not found.` },
@@ -342,7 +205,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifests", data: manifest }),
+              text: JSON.stringify({ resultType: "manifest_states", data: [manifestState] }),
             },
           ],
         };
@@ -355,16 +218,13 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     }
   );
 
-  // ── 7. List file entries ─────────────────────────────────────────────────
-
   server.registerTool(
     SUBGRAPH_LIST_FILE_ENTRIES,
     {
       title: "List File Entries",
       description:
-        "List all file entries belonging to a specific manifest. Each file entry " +
-        "contains a tag and its associated fields with values fully populated.\n\n" +
-        "Use a manifest ID from list_manifests, get_manifest, or list_manifest_states results.",
+        "List all file entries belonging to a specific manifest by the Manifest State's ID. Each file entry " +
+        "contains a tag and its associated fields with values fully populated.\n\n",
       inputSchema: {
         manifestId: z
           .string()
@@ -387,7 +247,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     },
     async ({ manifestId, first, skip }) => {
       try {
-        const entries = await client.listFileEntries({
+        const entries = await client.getFilesByManifestStateId({
           manifestId,
           first,
           skip,
@@ -409,122 +269,6 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
       }
     }
   );
-
-  // ── 8. Get file entries ──────────────────────────────────────────────────
-
-  server.registerTool(
-    SUBGRAPH_GET_FILE_ENTRIES,
-    {
-      title: "Get File Entries",
-      description:
-        "Retrieve file entries belonging to a specific manifest. Each file entry " +
-        "contains a tag and its associated fields with values.\n\n" +
-        "Use a manifest ID from get_manifest or list_manifest_states results.",
-      inputSchema: {
-        manifestId: z
-          .string()
-          .min(1)
-          .describe("The manifest entity ID to get file entries for"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of file entries to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of file entries to skip for pagination")
-      },
-    },
-    async ({ manifestId, first, skip }) => {
-      try {
-        const entries = await client.listFileEntries({
-          manifestId,
-          first,
-          skip,
-        });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "file_entries", data: entries }),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-  // ── 9. Get fields ────────────────────────────────────────────────────────
-
-  server.registerTool(
-    SUBGRAPH_GET_FIELDS,
-    {
-      title: "Get Fields",
-      description:
-        "Retrieve fields belonging to a specific file entry. Each field includes " +
-        "its name, value, type, access level, and optional pricing.\n\n" +
-        "Use a file entry ID from get_file_entries or get_manifest results.",
-      inputSchema: {
-        fileEntryId: z
-          .string()
-          .min(1)
-          .describe("The file entry entity ID to get fields for"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of fields to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of fields to skip for pagination"),
-        response_format: z
-          .enum(["markdown", "json"])
-          .default("json")
-          .describe("Output format: 'markdown' for human-readable or 'json' for machine-readable"),
-      },
-    },
-    async ({ fileEntryId, first, skip }) => {
-      try {
-        const fields = await client.getFields({
-          id: fileEntryId,
-          first,
-          skip,
-        });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "fields", data: fields }),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-  // ── 10. Search fields (within schema) ────────────────────────────────────
 
   server.registerTool(
     SUBGRAPH_SEARCH_FIELDS,
@@ -569,7 +313,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     async ({ schemaName, fieldName, fieldValue, owner, first, skip }) => {
       try {
 
-        const manifests = await client.searchManifestsByFieldsAndSchemaName(schemaName, {
+        const manifestStates = await client.getManifestStatesByFieldsAndSchemaName(schemaName, {
           name: fieldName,
           value: fieldValue,
           first,
@@ -580,7 +324,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: manifests }),
+              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates }),
             },
           ],
         };
@@ -592,8 +336,6 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
       }
     }
   );
-
-  // ── 11. Search fields global (cross-schema) ──────────────────────────────
 
   server.registerTool(
     SUBGRAPH_SEARCH_FIELDS_GLOBAL,
@@ -612,10 +354,6 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           .string()
           .optional()
           .describe("Exact, case sensitive, value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
-        owner: z
-          .string()
-          .optional()
-          .describe("Filter by data source owner address"),
         first: z
           .number()
           .int()
@@ -631,9 +369,9 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           .describe("Number of results to skip for pagination"),
       },
     },
-    async ({ fieldName, fieldValue, owner, first, skip }) => {
+    async ({ fieldName, fieldValue, first, skip }) => {
       try {
-        const fields = await client.searchManifestsByFieldsGlobal({
+        const manifestStates = await client.getManifestsByFields({
           name: fieldName,
           value: fieldValue,
           first,
@@ -644,7 +382,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: fields }),
+              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates }),
             },
           ],
         };
@@ -687,7 +425,7 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
     },
     async ({ fieldName, first, skip }) => {
       try {
-        const files = await client.searchFilesByFileFieldName({
+        const files = await client.getFilesByFileFieldName({
           name: fieldName,
           first,
           skip,
@@ -709,8 +447,6 @@ export function registerTools(server: McpServer, client: McpSubgraphClient) {
       }
     }
   );
-
-  // ── 12. Raw query ────────────────────────────────────────────────────────
 
   server.registerTool(
     SUBGRAPH_RAW_QUERY,
