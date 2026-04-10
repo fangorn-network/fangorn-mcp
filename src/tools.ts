@@ -52,7 +52,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: schemaStates }),
+              text: JSON.stringify({ resultType: "schemas", data: schemaStates, displayData: true }),
             },
           ],
         };
@@ -103,7 +103,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: [schemaState] }),
+              text: JSON.stringify({ resultType: "schemas", data: [schemaState], displayData: true }),
             },
           ],
         };
@@ -154,7 +154,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: [schemaState] }),
+              text: JSON.stringify({ resultType: "schemas", data: [schemaState], displayData: true }),
             },
           ],
         };
@@ -196,7 +196,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "files", data: [file] }),
+              text: JSON.stringify({ resultType: "files", data: [file], displayData: true }),
             },
           ],
         };
@@ -256,7 +256,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates }),
+              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates, displayData: true }),
             },
           ],
         };
@@ -301,7 +301,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: [manifestState] }),
+              text: JSON.stringify({ resultType: "manifest_states", data: [manifestState], displayData: true}),
             },
           ],
         };
@@ -353,7 +353,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "file_entries", data: entries }),
+              text: JSON.stringify({ resultType: "files", data: entries, displayData: true }),
             },
           ],
         };
@@ -420,7 +420,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates }),
+              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates, displayData: true }),
             },
           ],
         };
@@ -478,7 +478,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates }),
+              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates, displayData: true }),
             },
           ],
         };
@@ -531,7 +531,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ resultType: "file_entries", data: files }),
+              text: JSON.stringify({ resultType: "files", data: files, displayData: true }),
             },
           ],
         };
@@ -565,7 +565,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
       try {
         const result = await client.rawQuery(query);
         return {
-          content: [{ type: "text", text: JSON.stringify({ resultType: "non-standard", data: result }) }],
+          content: [{ type: "text", text: JSON.stringify({ resultType: "non-standard", data: result, displayData: false }) }],
         };
       } catch (err) {
         return {
