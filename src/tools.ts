@@ -24,7 +24,8 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
     {
       title: "List All Schemas",
       description:
-        "List all registered schemas in the subgraph. Optionally filter by owner address.",
+        "List all registered schemas in the subgraph. Optionally filter by owner address. \
+				 Tip: You can use this to see what type of data is available in the network.",
       inputSchema: {
         owner: z
           .string()
