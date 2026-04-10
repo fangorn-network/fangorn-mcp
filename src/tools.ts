@@ -6,9 +6,11 @@ import {
 
 const SUBGRAPH_LIST_SCHEMAS = "subgraph_list_all_schemas";
 const SUBGRAPH_GET_SCHEMA_BY_NAME = "subgraph_get_schema_by_name";
+const SUBGRAPH_GET_SCHEMA_BY_ID = "subgraph_get_schema_by_id";
 const SUBGRAPH_LIST_MANIFEST_STATES_BY_SCHEMA_NAME = "subgraph_list_manifest_states_by_schema_name";
 const SUBGRAPH_GET_MANIFEST_BY_ID = "subgraph_get_manifest_by_id";
 const SUBGRAPH_LIST_FILE_ENTRIES = "subgraph_list_file_entries";
+const SUBGRAPH_GET_FILE_BY_ID = "subgraph_get_file_by_id";
 const SUBGRAPH_SEARCH_FIELDS = "subgraph_search_fields";
 const SUBGRAPH_SEARCH_FIELDS_GLOBAL = "subgraph_search_fields_global";
 const SUBGRAPH_RAW_QUERY = "subgraph_raw_query";
@@ -114,6 +116,100 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
     }
   );
 
+	  server.registerTool(
+    SUBGRAPH_GET_SCHEMA_BY_ID,
+    {
+      title: "Get Schema By id",
+      description:
+        "Retrieve a single schema by its unique id. Returns the entire schema." +
+        "This can be used to discover which field names are available for files in manifests that use this schema.",
+      inputSchema: {
+        id: z
+          .string()
+          .min(1)
+          .describe("The schema id"),
+      },
+    },
+    async ({ id }) => {
+      try {
+        const schemaState = await client.getSchemaStateById({id});
+
+        if (!schemaState) {
+          return {
+            content: [
+              { type: "text", text: `Schema with id:"${id}" not found.` },
+            ],
+          };
+        }
+
+				if (!schemaState.versions || schemaState.versions.length === 0) {
+					return {
+            content: [
+              { type: "text", text: `Schema with id: "${id}" not found.` },
+            ],
+          };
+				}
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ resultType: "schemas", data: [schemaState] }),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+	  server.registerTool(
+    SUBGRAPH_GET_FILE_BY_ID,
+    {
+      title: "Get File By id",
+      description:
+        "Retrieve a single file by its id. Returns the entire file.",
+      inputSchema: {
+        id: z
+          .string()
+          .min(1)
+          .describe("The file's id"),
+      },
+    },
+    async ({ id }) => {
+      try {
+				
+        const file = await client.getFileById({id});
+        if (!file) {
+          return {
+            content: [
+              { type: "text", text: `File with id:"${id}" not found.` },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ resultType: "files", data: [file] }),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+
   server.registerTool(
     SUBGRAPH_LIST_MANIFEST_STATES_BY_SCHEMA_NAME,
     {
@@ -183,20 +279,20 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
         "Retrieve a single manifest by its parent manifest state ID. Returns the full manifest including " +
         "all file entries and their fields.",
       inputSchema: {
-        manifestId: z
+        manifestStateId: z
           .string()
           .min(1)
-          .describe("The manifest entity ID to retrieve")
+          .describe("The manifest state ID to retrieve")
       },
     },
-    async ({ manifestId }) => {
+    async ({ manifestStateId }) => {
       try {
-        const manifestState = await client.getManifestStateById({id: manifestId});
+        const manifestState = await client.getManifestStateById({id: manifestStateId});
 
         if (!manifestState) {
           return {
             content: [
-              { type: "text", text: `Manifest "${manifestId}" not found.` },
+              { type: "text", text: `Manifest "${manifestStateId}" not found.` },
             ],
           };
         }
