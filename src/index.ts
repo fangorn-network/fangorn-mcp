@@ -19,8 +19,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
-
-import { SubgraphClient } from "./subgraph-client.js";
+import { FangornGraphClient } from "@fangorn-network/subgraph-client";
 import { registerTools } from "./tools.js";
 
 // ── Configuration ───────────────────────────────────────────────────────────
@@ -40,7 +39,7 @@ const SESSION_TIMEOUT_MS = parseInt(process.env.SESSION_TIMEOUT_MS ?? "1800000",
 
 // ── Bootstrap ───────────────────────────────────────────────────────────────
 
-const client = new SubgraphClient(SUBGRAPH_URL);
+const client = new FangornGraphClient(SUBGRAPH_URL);
 
 function createServer(): McpServer {
   const server = new McpServer({
@@ -54,10 +53,7 @@ function createServer(): McpServer {
 /**
  * Safely tear down both a server and its transport.
  */
-async function closeSession(server: McpServer, transport: { close?: () => void }) {
-  try {
-    transport.close?.();
-  } catch { /* best effort */ }
+async function closeSession(server: McpServer) {
   try {
     await server.close();
   } catch { /* best effort */ }
@@ -114,7 +110,7 @@ async function startHttp() {
       if (now - session.lastSeen > SESSION_TIMEOUT_MS) {
         console.error(`Evicting idle streamable session ${id}`);
         streamableSessions.delete(id);
-        closeSession(session.server, session.transport);
+        closeSession(session.server);
       }
     }
 
@@ -122,7 +118,7 @@ async function startHttp() {
       if (now - session.lastSeen > SESSION_TIMEOUT_MS) {
         console.error(`Evicting idle SSE session ${id}`);
         sseSessions.delete(id);
-        closeSession(session.server, session.transport);
+        closeSession(session.server);
       }
     }
   }, 60_000);
@@ -180,11 +176,14 @@ async function startHttp() {
         }
 
         // Clean up on close
+        let closed = false;
         transport.onclose = () => {
+          if (closed) return;
+          closed = true;
           if (transport.sessionId) {
             streamableSessions.delete(transport.sessionId);
           }
-          closeSession(server, transport);
+          closeSession(server);
         };
       } catch (err) {
         throw err;
@@ -236,9 +235,9 @@ async function startHttp() {
         res.status(400).json({ error: "Invalid session ID" });
         return;
       }
+      // handleRequest sends the 200 and closes the transport internally,
+      // which fires onclose → the guard flag handles map cleanup + server.close()
       await session.transport.handleRequest(req, res, req.body);
-      streamableSessions.delete(sessionId);
-      await closeSession(session.server, session.transport);
     } catch (err) {
       console.error("Error in DELETE /mcp:", err);
       if (!res.headersSent) {
@@ -271,9 +270,12 @@ async function startHttp() {
         lastSeen: Date.now(),
       });
 
+      let closed = false;
       transport.onclose = () => {
+        if (closed) return;
+        closed = true;
         sseSessions.delete(transport.sessionId);
-        closeSession(server, transport);
+        closeSession(server);
       };
 
       await server.connect(transport);
@@ -322,8 +324,8 @@ async function startHttp() {
   app.listen(PORT, () => {
     console.info(
       `Fangorn MCP server listening on http://localhost:${PORT}\n` +
-        `  Streamable HTTP: POST/GET/DELETE http://localhost:${PORT}/mcp\n` +
-        `  Legacy SSE: GET http://localhost:${PORT}/sse → POST http://localhost:${PORT}/messages`
+      `  Streamable HTTP: POST/GET/DELETE http://localhost:${PORT}/mcp\n` +
+      `  Legacy SSE: GET http://localhost:${PORT}/sse → POST http://localhost:${PORT}/messages`
     );
   });
 }
