@@ -15,6 +15,7 @@ const SUBGRAPH_SEARCH_FIELDS = "subgraph_search_fields";
 const SUBGRAPH_SEARCH_FIELDS_GLOBAL = "subgraph_search_fields_global";
 const SUBGRAPH_RAW_QUERY = "subgraph_raw_query";
 const SUBGRAPH_SEARCH_FIELDS_BY_NAME_GLOBAL = "subgraph_search_fields_by_name_global";
+const SUBGRAPH_SEARCH_FIELDS_BY_VALUE_GLOBAL = "subgraph_search_fields_by_value_global"
 
 
 export function registerTools(server: McpServer, client: FangornGraphClient) {
@@ -387,7 +388,12 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
         fieldValue: z
           .string()
           .optional()
-          .describe("Exact, case sensitive, value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
+          .describe("File field's value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
+				caseSensitive: z
+					.boolean()
+					.optional()
+					.default(false)
+					.describe("Whether the File field's value is case sensitive. Tip: Default to caseSensitive = false to find results that may use incorrect casing."),
         owner: z
           .string()
           .optional()
@@ -407,10 +413,10 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           .describe("Number of results to skip for pagination")
       },
     },
-    async ({ schemaName, fieldName, fieldValue, owner, first, skip }) => {
+    async ({ schemaName, fieldName, fieldValue, caseSensitive, owner, first, skip }) => {
       try {
 
-        const manifestStates = await client.getManifestStatesByFieldsAndSchemaName(schemaName, {
+        const manifestStates = await client.getManifestStatesByFieldsAndSchemaName(schemaName, caseSensitive, {
           name: fieldName,
           value: fieldValue,
           first,
