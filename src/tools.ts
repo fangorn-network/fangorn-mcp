@@ -16,7 +16,7 @@ const GET_FILE_BY_ID = "get_file_by_id";
 const GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS = "get_manifests_by_schema_name_and_file_fields";
 const GET_MANIFEST_STATES_BY_FILE_FIELDS = "get_manifests_by_file_fields";
 const GET_FILES_BY_FILE_FIELD_NAME = "get_files_by_file_field_name";
-const SUBGRAPH_SEARCH_FIELDS_BY_VALUE_GLOBAL = "get_manifests_by_file_field_value"
+const GET_MANIFESTS_BY_FILE_FIELD_VALUE = "get_manifests_by_file_field_value"
 const RAW_QUERY = "subgraph_raw_query";
 
 
@@ -500,7 +500,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
 	  server.registerTool(
-    SUBGRAPH_SEARCH_FIELDS_BY_VALUE_GLOBAL,
+    GET_MANIFESTS_BY_FILE_FIELD_VALUE,
     {
       title: "Get Manifests by File Values",
       description:
