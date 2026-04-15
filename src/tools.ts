@@ -61,6 +61,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.log(`received error ${JSON.stringify(err)}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,

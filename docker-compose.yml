@@ -1,5 +1,5 @@
 services:
-  facilitator:
+  mcp:
     build:
       context: .
       dockerfile: ./Dockerfile

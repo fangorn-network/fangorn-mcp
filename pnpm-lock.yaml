@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@fangorn-network/subgraph-client':
-        specifier: ^0.0.2
-        version: 0.0.2
+        specifier: ^0.0.3
+        version: 0.0.3
       '@modelcontextprotocol/sdk':
         specifier: ^1.28.0
         version: 1.28.0(zod@4.3.6)
@@ -213,8 +213,8 @@ packages:
   '@fangorn-network/client-types@0.0.2':
     resolution: {integrity: sha512-bvrmt6ug1uGvn/RDJ59suMeyQvZzUuK75Xmuvn5DC0W1AyfKvDnZKYKs2ugaiyzFou6df1BSo5+jo7cZoiGWAw==}
 
-  '@fangorn-network/subgraph-client@0.0.2':
-    resolution: {integrity: sha512-SzvdCjHUryp9ipAi1byXcSXWdf8B6DBSL+SyWZIUuiuanm2O7t1+xsTj7ErdbkTuEHuzuKeaH2qlrxkLX1idqw==}
+  '@fangorn-network/subgraph-client@0.0.3':
+    resolution: {integrity: sha512-Ag/thj+EU0ppAWMm10Kif2ynpF2ZQNOdLGSgLR3TJ48+dcrq2bhzCLUs1Qd42LCnbISDjHD3/WcxQ/hmj2PfaA==}
     engines: {node: '>=18'}
 
   '@graphql-codegen/add@6.0.0':
@@ -950,7 +950,7 @@ snapshots:
 
   '@fangorn-network/client-types@0.0.2': {}
 
-  '@fangorn-network/subgraph-client@0.0.2':
+  '@fangorn-network/subgraph-client@0.0.3':
     dependencies:
       '@fangorn-network/client-types': 0.0.2
       '@graphql-codegen/import-types-preset': 4.0.0(graphql@16.13.2)
