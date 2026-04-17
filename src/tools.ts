@@ -61,7 +61,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
-				console.log(`received error ${JSON.stringify(err)}`)
+				console.error(`Error from tool ${GET_ALL_SCHEMAS} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -113,6 +113,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_SCHEMA_BY_NAME} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -165,6 +166,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_SCHEMA_BY_ID} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -207,6 +209,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_FILE_BY_ID} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -265,6 +268,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_SCHEMA_NAME} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -309,6 +313,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFEST_STATE_BY_ID} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -361,6 +366,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_FILES_BY_MANIFEST_STATE_ID} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -433,6 +439,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -491,6 +498,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_FILE_FIELDS} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -543,6 +551,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFESTS_BY_FILE_FIELD_VALUE} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -596,6 +605,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_FILES_BY_FILE_FIELD_NAME} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -628,6 +638,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [{ type: "text", text: JSON.stringify({ resultType: "non-standard", data: result, displayData: false }) }],
         };
       } catch (err) {
+				console.error(`Error from tool ${RAW_QUERY} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
