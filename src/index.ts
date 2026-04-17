@@ -30,6 +30,8 @@ if (!SUBGRAPH_URL) {
   process.exit(1);
 }
 
+const SUBGRAPH_API_KEY = process.env.SUBGRAPH_API_KEY;
+
 const TRANSPORT = (process.env.TRANSPORT ?? "stdio").toLowerCase();
 const PORT = parseInt(process.env.PORT ?? "4000", 10);
 
@@ -39,7 +41,7 @@ const SESSION_TIMEOUT_MS = parseInt(process.env.SESSION_TIMEOUT_MS ?? "1800000",
 
 // ── Bootstrap ───────────────────────────────────────────────────────────────
 
-const client = new FangornGraphClient(SUBGRAPH_URL);
+const client = new FangornGraphClient(SUBGRAPH_URL, SUBGRAPH_API_KEY);
 
 function createServer(): McpServer {
   const server = new McpServer({

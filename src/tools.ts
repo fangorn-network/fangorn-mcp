@@ -4,27 +4,30 @@ import {
   FangornGraphClient,
 } from "@fangorn-network/subgraph-client"
 
-const SUBGRAPH_LIST_SCHEMAS = "subgraph_list_all_schemas";
-const SUBGRAPH_GET_SCHEMA_BY_NAME = "subgraph_get_schema_by_name";
-const SUBGRAPH_GET_SCHEMA_BY_ID = "subgraph_get_schema_by_id";
-const SUBGRAPH_LIST_MANIFEST_STATES_BY_SCHEMA_NAME = "subgraph_list_manifest_states_by_schema_name";
-const SUBGRAPH_GET_MANIFEST_BY_ID = "subgraph_get_manifest_by_id";
-const SUBGRAPH_LIST_FILE_ENTRIES = "subgraph_list_file_entries";
-const SUBGRAPH_GET_FILE_BY_ID = "subgraph_get_file_by_id";
-const SUBGRAPH_SEARCH_FIELDS = "subgraph_search_fields";
-const SUBGRAPH_SEARCH_FIELDS_GLOBAL = "subgraph_search_fields_global";
-const SUBGRAPH_RAW_QUERY = "subgraph_raw_query";
-const SUBGRAPH_SEARCH_FIELDS_BY_NAME_GLOBAL = "subgraph_search_fields_by_name_global";
+// Note: Referring to manifest states as manifests in tool descriptions in order to minimize agent confusion
+
+const GET_ALL_SCHEMAS = "get_all_schemas";
+const GET_SCHEMA_BY_NAME = "get_schema_by_name";
+const GET_SCHEMA_BY_ID = "get_schema_by_id";
+const GET_MANIFEST_STATES_BY_SCHEMA_NAME = "get_manifests_by_schema_name";
+const GET_MANIFEST_STATE_BY_ID = "get_manifests_by_manifest_state_id";
+const GET_FILES_BY_MANIFEST_STATE_ID = "get_files_by_manifest_state_id";
+const GET_FILE_BY_ID = "get_file_by_id";
+const GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS = "get_manifests_by_schema_name_and_file_fields";
+const GET_MANIFEST_STATES_BY_FILE_FIELDS = "get_manifests_by_file_fields";
+const GET_FILES_BY_FILE_FIELD_NAME = "get_files_by_file_field_name";
+const GET_MANIFESTS_BY_FILE_FIELD_VALUE = "get_manifests_by_file_field_value"
+const RAW_QUERY = "subgraph_raw_query";
 
 
 export function registerTools(server: McpServer, client: FangornGraphClient) {
 
   server.registerTool(
-    SUBGRAPH_LIST_SCHEMAS,
+    GET_ALL_SCHEMAS,
     {
-      title: "List All Schemas",
+      title: "Get All Schemas",
       description:
-        "List all registered schemas in the subgraph. Optionally filter by owner address. \
+        "Get all registered schemas in the subgraph. Optionally filter by owner address. \
 				 Tip: You can use this to see what type of data is available in the network.",
       inputSchema: {
         owner: z
@@ -58,6 +61,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_ALL_SCHEMAS} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -67,7 +71,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
   server.registerTool(
-    SUBGRAPH_GET_SCHEMA_BY_NAME,
+    GET_SCHEMA_BY_NAME,
     {
       title: "Get Schema By Name",
       description:
@@ -109,6 +113,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_SCHEMA_BY_NAME} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -118,12 +123,13 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
 	  server.registerTool(
-    SUBGRAPH_GET_SCHEMA_BY_ID,
+    GET_SCHEMA_BY_ID,
     {
       title: "Get Schema By id",
       description:
         "Retrieve a single schema by its unique id. Returns the entire schema." +
-        "This can be used to discover which field names are available for files in manifests that use this schema.",
+        "This can be used to discover which field names are available for files in manifests that use this schema." +
+				"Tip: Prefer searching by ID to avoid making mistakes.",
       inputSchema: {
         id: z
           .string()
@@ -160,6 +166,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_SCHEMA_BY_ID} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -169,7 +176,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
 	  server.registerTool(
-    SUBGRAPH_GET_FILE_BY_ID,
+    GET_FILE_BY_ID,
     {
       title: "Get File By id",
       description:
@@ -202,6 +209,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_FILE_BY_ID} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -212,14 +220,12 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
 
 
   server.registerTool(
-    SUBGRAPH_LIST_MANIFEST_STATES_BY_SCHEMA_NAME,
+    GET_MANIFEST_STATES_BY_SCHEMA_NAME,
     {
-      title: "List Manifest States By Schema Name",
+      title: "Get Manifests By Schema Name",
       description:
-        "List all manifest states published under a given schema by the schema's name. Each manifest state " +
-        "represents a data publication by an owner. Returns the full manifest " +
-        "including its file entries, and fields.\n\n" +
-        "Tip: Use subgraph_get_schema first to understand the schema's field definitions.",
+        "Get all manifests published under a given schema by the schema's name. Returns the full manifest " +
+        "including its file entries, and fields.",
       inputSchema: {
         schemaName: z
           .string()
@@ -262,6 +268,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_SCHEMA_NAME} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -273,12 +280,11 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   // ── 6. Get manifest ──────────────────────────────────────────────────────
 
   server.registerTool(
-    SUBGRAPH_GET_MANIFEST_BY_ID,
+    GET_MANIFEST_STATE_BY_ID,
     {
       title: "Get Manifest by Manifest State ID",
       description:
-        "Retrieve a single manifest by its parent manifest state ID. Returns the full manifest including " +
-        "all file entries and their fields.",
+        "Retrieve a single manifest by its manifest state ID. Returns the full manifest.",
       inputSchema: {
         manifestStateId: z
           .string()
@@ -307,6 +313,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFEST_STATE_BY_ID} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -316,11 +323,11 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
   server.registerTool(
-    SUBGRAPH_LIST_FILE_ENTRIES,
+    GET_FILES_BY_MANIFEST_STATE_ID,
     {
-      title: "List File Entries",
+      title: "Get File Entries by Manifest State ID",
       description:
-        "List all file entries belonging to a specific manifest by the Manifest State's ID. Each file entry " +
+        "Get all file entries belonging to a specific manifest by the Manifest State's ID. Each file entry " +
         "contains a tag and its associated fields with values fully populated.\n\n",
       inputSchema: {
         manifestId: z
@@ -359,6 +366,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_FILES_BY_MANIFEST_STATE_ID} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -368,13 +376,13 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
   server.registerTool(
-    SUBGRAPH_SEARCH_FIELDS,
+    GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS,
     {
-      title: "Search Fields",
+      title: "Get Manifests by Schema Name and File Fields",
       description:
-        "Search for fields matching a name and/or value within a specific schema. " +
-        "Returns Manifests directly.\n\n" +
-        "Tip: Use subgraph_get_schema first to discover available field names.",
+        "Search for fields matching a name and/or value for manifests using a specific schema. " +
+        "Returns manifests directly.\n\n" +
+        "Tip: Prefer caseSensitive=false when including the fieldValue to find more matches.",
       inputSchema: {
         schemaName: z
           .string()
@@ -387,7 +395,12 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
         fieldValue: z
           .string()
           .optional()
-          .describe("Exact, case sensitive, value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
+          .describe("File field's value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
+				caseSensitive: z
+					.boolean()
+					.optional()
+					.default(false)
+					.describe("Whether the File field's value is case sensitive. Tip: Default to caseSensitive = false to find results that may use incorrect casing."),
         owner: z
           .string()
           .optional()
@@ -407,10 +420,10 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           .describe("Number of results to skip for pagination")
       },
     },
-    async ({ schemaName, fieldName, fieldValue, owner, first, skip }) => {
+    async ({ schemaName, fieldName, fieldValue, caseSensitive, owner, first, skip }) => {
       try {
 
-        const manifestStates = await client.getManifestStatesByFieldsAndSchemaName(schemaName, {
+        const manifestStates = await client.getManifestStatesByFieldsAndSchemaName(schemaName, caseSensitive, {
           name: fieldName,
           value: fieldValue,
           first,
@@ -426,6 +439,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -435,11 +449,11 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
   server.registerTool(
-    SUBGRAPH_SEARCH_FIELDS_GLOBAL,
+    GET_MANIFEST_STATES_BY_FILE_FIELDS,
     {
-      title: "Search Fields (Global)",
+      title: "Get Manifests by File Fields",
       description:
-        "Search for fields by name and value across ALL schemas and manifests. Returns Manifest " +
+        "Search for Manifests based on file fields across ALL schemas. Returns Manifest " +
         "entities directly. \n\n" +
         "Use this when you want to find collections of data at a higher level without knowing which schema they belong to.",
       inputSchema: {
@@ -484,6 +498,60 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_FILE_FIELDS} ${err}`)
+        return {
+          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+	  server.registerTool(
+    GET_MANIFESTS_BY_FILE_FIELD_VALUE,
+    {
+      title: "Get Manifests by File Values",
+      description:
+        "Search for Manifests based on file field values across ALL schemas. Returns Manifest " +
+        "entities directly.",
+      inputSchema: {
+        fieldValue: z
+          .string()
+          .describe("The file field value to match (e.g. 'Theo Cappucino' or 'FANGORN')."),
+				caseSensitive: z
+					.boolean()
+					.default(false)
+					.describe("Whether the search is case sensitive. Tip: Prefer caseSensitive=false to find more results."),
+        first: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(20)
+          .describe("Maximum number of results to return"),
+        skip: z
+          .number()
+          .int()
+          .min(0)
+          .default(0)
+          .describe("Number of results to skip for pagination"),
+      },
+    },
+    async ({ fieldValue, caseSensitive, first, skip }) => {
+      try {
+
+				const manifestStates = await client.getManifestStatesByFileFieldValue(caseSensitive, {fieldValue, first, skip})
+				
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates, displayData: true }),
+            },
+          ],
+        };
+      } catch (err) {
+				console.error(`Error from tool ${GET_MANIFESTS_BY_FILE_FIELD_VALUE} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -493,13 +561,13 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
 	server.registerTool(
-    SUBGRAPH_SEARCH_FIELDS_BY_NAME_GLOBAL,
+    GET_FILES_BY_FILE_FIELD_NAME,
     {
-      title: "Search for Fields by Name (Global)",
+      title: "Get Files by File Field Name",
       description:
-        "Search for fields by name across ALL schemas and manifests. Returns File " +
+        "Search for files based on the given file field name across ALL schemas and manifest states. Returns File " +
         "entities directly. \n\n" +
-        "Use this when you want to find data granularly without knowing which schema or manifest it belongs to.",
+        "Use this when you want to find data granularly without knowing which schema or manifest state it belongs to.",
       inputSchema: {
         fieldName: z
           .string()
@@ -537,6 +605,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
+				console.error(`Error from tool ${GET_FILES_BY_FILE_FIELD_NAME} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -546,7 +615,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
   server.registerTool(
-    SUBGRAPH_RAW_QUERY,
+    RAW_QUERY,
     {
       title: "Raw GraphQL Query",
       description:
@@ -569,6 +638,7 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           content: [{ type: "text", text: JSON.stringify({ resultType: "non-standard", data: result, displayData: false }) }],
         };
       } catch (err) {
+				console.error(`Error from tool ${RAW_QUERY} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,

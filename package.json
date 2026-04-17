@@ -1,9 +1,10 @@
 {
   "name": "fangorn-mcp-server",
-  "version": "1.0.0",
-  "description": "Enables agents to query and interpret Fangorn subgraphs.",
+  "version": "0.0.1",
+  "description": "Exposes tools for agents to query Fangorn subgraphs.",
   "type": "module",
   "main": "dist/index.js",
+	"files": ["dist"],
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
@@ -24,7 +25,7 @@
     "zod": "^4.3.6",
 		"graphql": "^16.13.2",
     "graphql-request": "^7.1.2",
-		"@fangorn-network/subgraph-client": "file:../subgraphs/client"
+		"@fangorn-network/subgraph-client": "^0.0.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
