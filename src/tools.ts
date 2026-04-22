@@ -9,14 +9,18 @@ import {
 const GET_ALL_SCHEMAS = "get_all_schemas";
 const GET_SCHEMA_BY_NAME = "get_schema_by_name";
 const GET_SCHEMA_BY_ID = "get_schema_by_id";
+
 const GET_MANIFEST_STATES_BY_SCHEMA_NAME = "get_manifests_by_schema_name";
 const GET_MANIFEST_STATE_BY_ID = "get_manifests_by_manifest_state_id";
-const GET_FILES_BY_MANIFEST_STATE_ID = "get_files_by_manifest_state_id";
-const GET_FILE_BY_ID = "get_file_by_id";
 const GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS = "get_manifests_by_schema_name_and_file_fields";
 const GET_MANIFEST_STATES_BY_FILE_FIELDS = "get_manifests_by_file_fields";
-const GET_FILES_BY_FILE_FIELD_NAME = "get_files_by_file_field_name";
 const GET_MANIFESTS_BY_FILE_FIELD_VALUE = "get_manifests_by_file_field_value"
+
+const GET_FILES_BY_MANIFEST_STATE_ID = "get_files_by_manifest_state_id";
+const GET_FILE_BY_ID = "get_file_by_id";
+const GET_FILES_BY_FILE_FIELDS = "get_files_by_file_fields"
+const GET_FILES_BY_FILE_FIELD_VALUE = "get_file_by_file_field_value"
+
 const RAW_QUERY = "subgraph_raw_query";
 
 
@@ -561,18 +565,26 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
   );
 
 	server.registerTool(
-    GET_FILES_BY_FILE_FIELD_NAME,
+    GET_FILES_BY_FILE_FIELDS,
     {
-      title: "Get Files by File Field Name",
+      title: "Get Files by File Fields",
       description:
-        "Search for files based on the given file field name across ALL schemas and manifest states. Returns File " +
-        "entities directly. \n\n" +
-        "Use this when you want to find data granularly without knowing which schema or manifest state it belongs to.",
+        "Search for files based on the given file field name and (optionally) file field value across ALL schemas and manifest states. Returns File " +
+        "entities directly. You can use this to be more precies with finding files if you know the field name and field value.",
       inputSchema: {
         fieldName: z
           .string()
           .min(1)
           .describe("Field name to search on (e.g. 'artist', 'title', 'genre')"),
+				fieldValue: z
+          .string()
+					.optional()
+          .describe("Field value to search on (e.g. 'Theo Cappucino', 'Fangorn', 'coleman')"),
+				caseSensitive: z
+					.boolean()
+					.optional()
+					.default(false)
+					.describe("Whether the search is case sensitive. Tip: Prefer caseSensitive=false to find more results."),
         first: z
           .number()
           .int()
@@ -588,10 +600,11 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           .describe("Number of results to skip for pagination"),
       },
     },
-    async ({ fieldName, first, skip }) => {
+    async ({ fieldName, fieldValue, caseSensitive, first, skip }) => {
       try {
-        const files = await client.getFilesByFileFieldName({
+        const files = await client.GetFilesByFileFieldNameValuePair(caseSensitive, {
           name: fieldName,
+					value: fieldValue,
           first,
           skip,
         });
@@ -605,7 +618,65 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
           ],
         };
       } catch (err) {
-				console.error(`Error from tool ${GET_FILES_BY_FILE_FIELD_NAME} ${err}`)
+				console.error(`Error from tool ${GET_FILES_BY_FILE_FIELDS} ${err}`)
+        return {
+          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+		server.registerTool(
+    GET_FILES_BY_FILE_FIELD_VALUE,
+    {
+      title: "Get Files by File Field Value",
+      description:
+        "Search for files based on the given file field value across ALL schemas and manifest states. Returns File " +
+        "entities directly.",
+      inputSchema: {
+				fieldValue: z
+          .string()
+					.min(1)
+          .describe("Field value to search on (e.g. 'Theo Cappucino', 'Fangorn', 'coleman')"),
+				caseSensitive: z
+					.boolean()
+					.optional()
+					.default(false)
+					.describe("Whether the search is case sensitive. Tip: Prefer caseSensitive=false to find more results."),
+        first: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(20)
+          .describe("Maximum number of results to return"),
+        skip: z
+          .number()
+          .int()
+          .min(0)
+          .default(0)
+          .describe("Number of results to skip for pagination"),
+      },
+    },
+    async ({ fieldValue, caseSensitive, first, skip }) => {
+      try {
+        const files = await client.getFilesByFileFieldValue(caseSensitive, {
+					value: fieldValue,
+          first,
+          skip,
+        });
+				
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ resultType: "files", data: files, displayData: true }),
+            },
+          ],
+        };
+      } catch (err) {
+				console.error(`Error from tool ${GET_FILES_BY_FILE_FIELD_VALUE} ${err}`)
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
