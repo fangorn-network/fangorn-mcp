@@ -1,67 +1,125 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ChromaClient } from "chromadb";
 import { z } from "zod";
-import {
-  FangornGraphClient,
-} from "@fangorn-network/subgraph-client"
+import { FangornGraphClient } from "@fangorn-network/subgraph-client";
 
-// Note: Referring to manifest states as manifests in tool descriptions in order to minimize agent confusion
-
+const SEARCH_DATASOURCES = "search_datasources";
 const GET_ALL_SCHEMAS = "get_all_schemas";
 const GET_SCHEMA_BY_NAME = "get_schema_by_name";
 const GET_SCHEMA_BY_ID = "get_schema_by_id";
-const GET_MANIFEST_STATES_BY_SCHEMA_NAME = "get_manifests_by_schema_name";
-const GET_MANIFEST_STATE_BY_ID = "get_manifests_by_manifest_state_id";
-const GET_FILES_BY_MANIFEST_STATE_ID = "get_files_by_manifest_state_id";
-const GET_FILE_BY_ID = "get_file_by_id";
-const GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS = "get_manifests_by_schema_name_and_file_fields";
-const GET_MANIFEST_STATES_BY_FILE_FIELDS = "get_manifests_by_file_fields";
-const GET_FILES_BY_FILE_FIELD_NAME = "get_files_by_file_field_name";
-const GET_MANIFESTS_BY_FILE_FIELD_VALUE = "get_manifests_by_file_field_value"
+const GET_MANIFESTS_BY_SCHEMA = "get_manifests_by_schema_id";
 const RAW_QUERY = "subgraph_raw_query";
 
+export function registerTools(
+  server: McpServer,
+  graphClient: FangornGraphClient,
+  chroma: ChromaClient,
+  chromaCollection: string = "fangorn",
+) {
 
-export function registerTools(server: McpServer, client: FangornGraphClient) {
+  // ── 1. Semantic search (replaces all file/manifest field tools) ───────────
+
+  server.registerTool(
+    SEARCH_DATASOURCES,
+    {
+      title: "Search Datasources",
+      description:
+        "Semantic search over all ingested datasources. Use natural language — " +
+        "the query does not need to match exact field names or values. " +
+        "Examples: 'tracks with the feeling of an autumn breeze', " +
+        "'melancholic jazz from the 90s', 'upbeat electronic music for working'. " +
+        "Optionally filter by owner address or schema ID. " +
+        "Returns the most relevant results ranked by similarity.",
+      inputSchema: {
+        query: z
+          .string()
+          .min(1)
+          .describe("Natural language search query"),
+        nResults: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .default(10)
+          .describe("Number of results to return"),
+        owner: z
+          .string()
+          .optional()
+          .describe("Filter by datasource owner address (e.g. 0x147c...)"),
+        schemaId: z
+          .string()
+          .optional()
+          .describe("Filter by schema ID (bytes32 hex)"),
+      },
+    },
+    async ({ query, nResults, owner, schemaId }) => {
+      try {
+        const collection = await chroma.getCollection({ name: chromaCollection });
+
+        const where: Record<string, string> = {};
+        if (owner) where["owner"] = owner;
+        if (schemaId) where["schemaId"] = schemaId;
+
+        const results = await collection.query({
+          queryTexts: [query],
+          nResults,
+          where: Object.keys(where).length > 0 ? where : undefined,
+          include: ["documents", "metadatas", "distances"] as any,
+        });
+
+        // TODO: this is incredibly unsafe!!!!!
+        const hits = results.ids[0].map((id, i) => ({
+          id,
+          score: +(1 - results.distances![0][i]!).toFixed(4),
+          document: results.documents[0][i],
+          manifestCid: results.metadatas![0][i]!.manifestCid,
+          name: results.metadatas![0][i]!.manifestName,
+          owner: results.metadatas![0][i]!.owner,
+          schemaId: results.metadatas![0][i]!.schemaId,
+          version: results.metadatas![0][i]!.version,
+        }));
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ resultType: "datasources", data: hits, displayData: true }),
+          }],
+        };
+      } catch (err) {
+        console.error(`Error from tool ${SEARCH_DATASOURCES}`, err);
+        return {
+          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // ── 2. Schema tools (subgraph still valid for these) ─────────────────────
 
   server.registerTool(
     GET_ALL_SCHEMAS,
     {
       title: "Get All Schemas",
       description:
-        "Get all registered schemas in the subgraph. Optionally filter by owner address. \
-				 Tip: You can use this to see what type of data is available in the network.",
+        "Get all registered schemas. Use this to discover what types of data exist in the network.",
       inputSchema: {
-        owner: z
-          .string()
-          .optional()
-          .describe("Filter schemas by owner address (e.g. 0x147c...)"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of schemas to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of schemas to skip for pagination"),
+        owner: z.string().optional().describe("Filter by owner address"),
+        first: z.number().int().min(1).max(100).default(20),
+        skip: z.number().int().min(0).default(0),
       },
     },
     async ({ owner, first, skip }) => {
       try {
-        const schemaStates = await client.getAllSchemaStates({ owner, first, skip });
+        const schemas = await graphClient.getAllSchemaStates({ owner, first, skip });
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: schemaStates, displayData: true }),
-            },
-          ],
+          content: [{
+            type: "text",
+            text: JSON.stringify({ resultType: "schemas", data: schemas, displayData: true }),
+          }],
         };
       } catch (err) {
-				console.error(`Error from tool ${GET_ALL_SCHEMAS} ${err}`)
+        console.error(`Error from tool ${GET_ALL_SCHEMAS}`, err);
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -74,46 +132,25 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
     GET_SCHEMA_BY_NAME,
     {
       title: "Get Schema By Name",
-      description:
-        "Retrieve a single schema by its fully-qualified name. Returns the entire schema." +
-        "This can be used to discover which field names are available for files in manifests that use this schema.",
+      description: "Retrieve a schema by its fully-qualified name (e.g. 'noagent-fangorn.test.music.v0').",
       inputSchema: {
-        name: z
-          .string()
-          .min(1)
-          .describe("Full schema name (e.g. 'noagent-fangorn.test.music.v0')"),
+        name: z.string().min(1).describe("Full schema name"),
       },
     },
     async ({ name }) => {
       try {
-        const schemaState = await client.getSchemaStateByName({name});
-
-        if (!schemaState) {
-          return {
-            content: [
-              { type: "text", text: `Schema "${name}" not found.` },
-            ],
-          };
+        const schema = await graphClient.getSchemaStateByName({ name });
+        if (!schema?.versions?.length) {
+          return { content: [{ type: "text", text: `Schema "${name}" not found.` }] };
         }
-
-				if (!schemaState.versions || schemaState.versions.length === 0) {
-					return {
-            content: [
-              { type: "text", text: `Schema "${name}" not found.` },
-            ],
-          };
-				}
-
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: [schemaState], displayData: true }),
-            },
-          ],
+          content: [{
+            type: "text",
+            text: JSON.stringify({ resultType: "schemas", data: [schema], displayData: true }),
+          }],
         };
       } catch (err) {
-				console.error(`Error from tool ${GET_SCHEMA_BY_NAME} ${err}`)
+        console.error(`Error from tool ${GET_SCHEMA_BY_NAME}`, err);
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -122,51 +159,29 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
     }
   );
 
-	  server.registerTool(
+  server.registerTool(
     GET_SCHEMA_BY_ID,
     {
-      title: "Get Schema By id",
-      description:
-        "Retrieve a single schema by its unique id. Returns the entire schema." +
-        "This can be used to discover which field names are available for files in manifests that use this schema." +
-				"Tip: Prefer searching by ID to avoid making mistakes.",
+      title: "Get Schema By ID",
+      description: "Retrieve a schema by its unique ID. Prefer this over name lookup.",
       inputSchema: {
-        id: z
-          .string()
-          .min(1)
-          .describe("The schema id"),
+        id: z.string().min(1).describe("Schema ID (bytes32 hex)"),
       },
     },
     async ({ id }) => {
       try {
-        const schemaState = await client.getSchemaStateById({id});
-
-        if (!schemaState) {
-          return {
-            content: [
-              { type: "text", text: `Schema with id:"${id}" not found.` },
-            ],
-          };
+        const schema = await graphClient.getSchemaStateById({ id });
+        if (!schema?.versions?.length) {
+          return { content: [{ type: "text", text: `Schema "${id}" not found.` }] };
         }
-
-				if (!schemaState.versions || schemaState.versions.length === 0) {
-					return {
-            content: [
-              { type: "text", text: `Schema with id: "${id}" not found.` },
-            ],
-          };
-				}
-
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "schemas", data: [schemaState], displayData: true }),
-            },
-          ],
+          content: [{
+            type: "text",
+            text: JSON.stringify({ resultType: "schemas", data: [schema], displayData: true }),
+          }],
         };
       } catch (err) {
-				console.error(`Error from tool ${GET_SCHEMA_BY_ID} ${err}`)
+        console.error(`Error from tool ${GET_SCHEMA_BY_ID}`, err);
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -175,100 +190,45 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
     }
   );
 
-	  server.registerTool(
-    GET_FILE_BY_ID,
-    {
-      title: "Get File By id",
-      description:
-        "Retrieve a single file by its id. Returns the entire file.",
-      inputSchema: {
-        id: z
-          .string()
-          .min(1)
-          .describe("The file's id"),
-      },
-    },
-    async ({ id }) => {
-      try {
-				
-        const file = await client.getFileById({id});
-        if (!file) {
-          return {
-            content: [
-              { type: "text", text: `File with id:"${id}" not found.` },
-            ],
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "files", data: [file], displayData: true }),
-            },
-          ],
-        };
-      } catch (err) {
-				console.error(`Error from tool ${GET_FILE_BY_ID} ${err}`)
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
+  // ── 3. Raw manifest event lookup (chain of custody, not content search) ───
 
   server.registerTool(
-    GET_MANIFEST_STATES_BY_SCHEMA_NAME,
+    GET_MANIFESTS_BY_SCHEMA,
     {
-      title: "Get Manifests By Schema Name",
+      title: "Get Manifest Events by Schema ID",
       description:
-        "Get all manifests published under a given schema by the schema's name. Returns the full manifest " +
-        "including its file entries, and fields.",
+        "Get raw on-chain manifest publish/update events for a given schema. " +
+        "Returns CIDs and block metadata — use this for provenance or to inspect " +
+        "what has been published, not for content search (use search_datasources for that).",
       inputSchema: {
-        schemaName: z
-          .string()
-          .min(1)
-          .describe("Full schema name to list manifest states for (e.g. 'noagent-fangorn.test.music.v0')"),
-        owner: z
-          .string()
-          .optional()
-          .describe("Filter by data source owner address"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of manifest states to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of manifest states to skip for pagination"),
+        schemaId: z.string().min(1).describe("Schema ID (bytes32 hex)"),
+        first: z.number().int().min(1).max(100).default(20),
+        skip: z.number().int().min(0).default(0),
       },
     },
-    async ({ schemaName, owner, first, skip }) => {
+    async ({ schemaId, first, skip }) => {
       try {
-        const manifestStates = await client.getManifestStatesBySchemaNameAndOwner({
-          name: schemaName,
-          owner,
-          first,
-          skip,
-        });
-
+        const result = await graphClient.rawQuery(`
+          {
+            manifestPublisheds(
+              where: { schemaId: "${schemaId}" }
+              first: ${first}
+              skip: ${skip}
+              orderBy: blockNumber
+              orderDirection: desc
+            ) {
+              id owner schemaId name manifestCid blockNumber blockTimestamp transactionHash
+            }
+          }
+        `);
         return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates, displayData: true }),
-            },
-          ],
+          content: [{
+            type: "text",
+            text: JSON.stringify({ resultType: "manifest_events", data: result, displayData: true }),
+          }],
         };
       } catch (err) {
-				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_SCHEMA_NAME} ${err}`)
+        console.error(`Error from tool ${GET_MANIFESTS_BY_SCHEMA}`, err);
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,
@@ -277,368 +237,28 @@ export function registerTools(server: McpServer, client: FangornGraphClient) {
     }
   );
 
-  // ── 6. Get manifest ──────────────────────────────────────────────────────
-
-  server.registerTool(
-    GET_MANIFEST_STATE_BY_ID,
-    {
-      title: "Get Manifest by Manifest State ID",
-      description:
-        "Retrieve a single manifest by its manifest state ID. Returns the full manifest.",
-      inputSchema: {
-        manifestStateId: z
-          .string()
-          .min(1)
-          .describe("The manifest state ID to retrieve")
-      },
-    },
-    async ({ manifestStateId }) => {
-      try {
-        const manifestState = await client.getManifestStateById({id: manifestStateId});
-
-        if (!manifestState) {
-          return {
-            content: [
-              { type: "text", text: `Manifest "${manifestStateId}" not found.` },
-            ],
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: [manifestState], displayData: true}),
-            },
-          ],
-        };
-      } catch (err) {
-				console.error(`Error from tool ${GET_MANIFEST_STATE_BY_ID} ${err}`)
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-  server.registerTool(
-    GET_FILES_BY_MANIFEST_STATE_ID,
-    {
-      title: "Get File Entries by Manifest State ID",
-      description:
-        "Get all file entries belonging to a specific manifest by the Manifest State's ID. Each file entry " +
-        "contains a tag and its associated fields with values fully populated.\n\n",
-      inputSchema: {
-        manifestId: z
-          .string()
-          .min(1)
-          .describe("The manifest entity ID to list file entries for"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of file entries to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of file entries to skip for pagination")
-      },
-    },
-    async ({ manifestId, first, skip }) => {
-      try {
-        const entries = await client.getFilesByManifestStateId({
-          manifestId,
-          first,
-          skip,
-        });
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "files", data: entries, displayData: true }),
-            },
-          ],
-        };
-      } catch (err) {
-				console.error(`Error from tool ${GET_FILES_BY_MANIFEST_STATE_ID} ${err}`)
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-  server.registerTool(
-    GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS,
-    {
-      title: "Get Manifests by Schema Name and File Fields",
-      description:
-        "Search for fields matching a name and/or value for manifests using a specific schema. " +
-        "Returns manifests directly.\n\n" +
-        "Tip: Prefer caseSensitive=false when including the fieldValue to find more matches.",
-      inputSchema: {
-        schemaName: z
-          .string()
-          .min(1)
-          .describe("Full schema name to search within (e.g. 'noagent-fangorn.test.music.v0')"),
-        fieldName: z
-          .string()
-          .optional()
-          .describe("Field name to search on (e.g. 'artist', 'title', 'genre')"),
-        fieldValue: z
-          .string()
-          .optional()
-          .describe("File field's value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
-				caseSensitive: z
-					.boolean()
-					.optional()
-					.default(false)
-					.describe("Whether the File field's value is case sensitive. Tip: Default to caseSensitive = false to find results that may use incorrect casing."),
-        owner: z
-          .string()
-          .optional()
-          .describe("Filter by data source owner address"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of fields to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of results to skip for pagination")
-      },
-    },
-    async ({ schemaName, fieldName, fieldValue, caseSensitive, owner, first, skip }) => {
-      try {
-
-        const manifestStates = await client.getManifestStatesByFieldsAndSchemaName(schemaName, caseSensitive, {
-          name: fieldName,
-          value: fieldValue,
-          first,
-          skip,
-        }, owner);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates, displayData: true }),
-            },
-          ],
-        };
-      } catch (err) {
-				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_SCHEMA_AND_FILE_FIELDS} ${err}`)
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-  server.registerTool(
-    GET_MANIFEST_STATES_BY_FILE_FIELDS,
-    {
-      title: "Get Manifests by File Fields",
-      description:
-        "Search for Manifests based on file fields across ALL schemas. Returns Manifest " +
-        "entities directly. \n\n" +
-        "Use this when you want to find collections of data at a higher level without knowing which schema they belong to.",
-      inputSchema: {
-        fieldName: z
-          .string()
-          .min(1)
-          .describe("Field name to search on (e.g. 'artist', 'title', 'genre')"),
-        fieldValue: z
-          .string()
-          .optional()
-          .describe("Exact, case sensitive, value to match (e.g. 'Theo Cappucino' or 'FANGORN'). If omitted, returns all fields matching the name."),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of results to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of results to skip for pagination"),
-      },
-    },
-    async ({ fieldName, fieldValue, first, skip }) => {
-      try {
-        const manifestStates = await client.getManifestsByFields({
-          name: fieldName,
-          value: fieldValue,
-          first,
-          skip,
-        });
-				
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates, displayData: true }),
-            },
-          ],
-        };
-      } catch (err) {
-				console.error(`Error from tool ${GET_MANIFEST_STATES_BY_FILE_FIELDS} ${err}`)
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-	  server.registerTool(
-    GET_MANIFESTS_BY_FILE_FIELD_VALUE,
-    {
-      title: "Get Manifests by File Values",
-      description:
-        "Search for Manifests based on file field values across ALL schemas. Returns Manifest " +
-        "entities directly.",
-      inputSchema: {
-        fieldValue: z
-          .string()
-          .describe("The file field value to match (e.g. 'Theo Cappucino' or 'FANGORN')."),
-				caseSensitive: z
-					.boolean()
-					.default(false)
-					.describe("Whether the search is case sensitive. Tip: Prefer caseSensitive=false to find more results."),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of results to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of results to skip for pagination"),
-      },
-    },
-    async ({ fieldValue, caseSensitive, first, skip }) => {
-      try {
-
-				const manifestStates = await client.getManifestStatesByFileFieldValue(caseSensitive, {fieldValue, first, skip})
-				
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "manifest_states", data: manifestStates, displayData: true }),
-            },
-          ],
-        };
-      } catch (err) {
-				console.error(`Error from tool ${GET_MANIFESTS_BY_FILE_FIELD_VALUE} ${err}`)
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
-
-	server.registerTool(
-    GET_FILES_BY_FILE_FIELD_NAME,
-    {
-      title: "Get Files by File Field Name",
-      description:
-        "Search for files based on the given file field name across ALL schemas and manifest states. Returns File " +
-        "entities directly. \n\n" +
-        "Use this when you want to find data granularly without knowing which schema or manifest state it belongs to.",
-      inputSchema: {
-        fieldName: z
-          .string()
-          .min(1)
-          .describe("Field name to search on (e.g. 'artist', 'title', 'genre')"),
-        first: z
-          .number()
-          .int()
-          .min(1)
-          .max(100)
-          .default(20)
-          .describe("Maximum number of results to return"),
-        skip: z
-          .number()
-          .int()
-          .min(0)
-          .default(0)
-          .describe("Number of results to skip for pagination"),
-      },
-    },
-    async ({ fieldName, first, skip }) => {
-      try {
-        const files = await client.getFilesByFileFieldName({
-          name: fieldName,
-          first,
-          skip,
-        });
-				
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resultType: "files", data: files, displayData: true }),
-            },
-          ],
-        };
-      } catch (err) {
-				console.error(`Error from tool ${GET_FILES_BY_FILE_FIELD_NAME} ${err}`)
-        return {
-          content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
+  // ── 4. Raw subgraph escape hatch ──────────────────────────────────────────
 
   server.registerTool(
     RAW_QUERY,
     {
       title: "Raw GraphQL Query",
       description:
-        "Execute a raw GraphQL query against the subgraph for advanced use " +
-        "cases not covered by the other tools. Use this when you need custom " +
-        "filters, nested relations, ordering, or aggregations that the " +
-        "higher-level tools don't expose.\n\n" +
-        "Prefer the higher-level tools when they cover your use case.",
+        "Execute a raw GraphQL query against the subgraph. Only useful for on-chain event data " +
+        "(ManifestPublished, ManifestUpdated, SchemaRegistered, SchemaUpdated, ResourceCreated, PriceUpdated). " +
+        "For content search use search_datasources instead.",
       inputSchema: {
-        query: z
-          .string()
-          .min(1)
-          .describe("A raw GraphQL query to execute against the subgraph"),
+        query: z.string().min(1).describe("Raw GraphQL query"),
       },
     },
     async ({ query }) => {
       try {
-        const result = await client.rawQuery(query);
+        const result = await graphClient.rawQuery(query);
         return {
-          content: [{ type: "text", text: JSON.stringify({ resultType: "non-standard", data: result, displayData: false }) }],
+          content: [{ type: "text", text: JSON.stringify({ resultType: "raw", data: result, displayData: false }) }],
         };
       } catch (err) {
-				console.error(`Error from tool ${RAW_QUERY} ${err}`)
+        console.error(`Error from tool ${RAW_QUERY}`, err);
         return {
           content: [{ type: "text", text: `Error: ${(err as Error).message}` }],
           isError: true,

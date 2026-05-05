@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
 import { FangornGraphClient } from "@fangorn-network/subgraph-client";
 import { registerTools } from "./tools.js";
+import { ChromaClient } from "chromadb";
 
 // ── Configuration ───────────────────────────────────────────────────────────
 
@@ -48,7 +49,9 @@ function createServer(): McpServer {
     name: "fangorn-mcp-server",
     version: "1.0.0",
   });
-  registerTools(server, client);
+
+  const chroma = new ChromaClient({ path: process.env.CHROMA_URL ?? "http://localhost:8000" });
+  registerTools(server, client, chroma);
   return server;
 }
 
